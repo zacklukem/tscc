@@ -118,7 +118,12 @@ export class InferPass extends NodeVisitor<void> {
     node.metadata.infer_type = node.operand.metadata?.infer_type;
   }
 
-  protected visitCallExpression(_node: ts.CallExpression): void {}
+  protected visitCallExpression(node: ts.CallExpression): void {
+    node.arguments.forEach(this.visit);
+    if (!node.metadata) node.metadata = {};
+    if (!ts.isPropertyAccessExpression(node.expression)) return;
+    node.metadata.this_passthrough = node.expression.expression;
+  }
 
   protected visitArrowFunction(node: ts.ArrowFunction): void {
     if (node.body) this.visit(node.body);
@@ -152,6 +157,10 @@ export class InferPass extends NodeVisitor<void> {
 
   protected visitPropertyAccessExpression(
     _node: ts.PropertyAccessExpression
+  ): void {}
+
+  protected visitThisKeyword(
+    _node: ts.KeywordToken<ts.SyntaxKind.ThisKeyword>
   ): void {}
 
   protected visitEndOfFileToken(_node: ts.EndOfFileToken): void {}

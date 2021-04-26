@@ -1,7 +1,10 @@
-import { readFileSync } from "fs";
+import { writeFileSync, readFileSync } from "fs";
 import ts from "typescript";
-import { GenVisitor } from "./gen";
+import { CGenPass } from "./c_gen_pass";
+// import { GenVisitor } from "./gen";
 import { InferPass } from "./infer_pass";
+import { InternalError } from "./err";
+import * as c from "./c_factory";
 
 const fileNames = process.argv.slice(2);
 fileNames.forEach((fileName) => {
@@ -15,7 +18,17 @@ fileNames.forEach((fileName) => {
 
   const infer_pass = new InferPass();
   infer_pass.visit(sourceFile);
-  const gen_pass = new GenVisitor();
-  gen_pass.visit(sourceFile);
-  gen_pass.print();
+  const gen_pass = new CGenPass();
+  const node = gen_pass.visit(sourceFile);
+  if (!node) throw new InternalError("wtf");
+  node.gen();
+  let s = node as c.SourceFile;
+  s.print();
+
+  writeFileSync("example.h", s.getHeader());
+  writeFileSync("example.c", s.getSource());
+
+  // const gen_pass = new GenVisitor();
+  // gen_pass.visit(sourceFile);
+  // gen_pass.print();
 });

@@ -53,6 +53,10 @@ export abstract class NodeVisitor<T> {
         return this.visitPropertyAccessExpression(
           node as ts.PropertyAccessExpression
         );
+      case ts.SyntaxKind.ThisKeyword:
+        return this.visitThisKeyword(
+          node as ts.KeywordToken<ts.SyntaxKind.ThisKeyword>
+        );
       case ts.SyntaxKind.EndOfFileToken:
         return this.visitEndOfFileToken(node as ts.EndOfFileToken);
     }
@@ -93,6 +97,9 @@ export abstract class NodeVisitor<T> {
   protected abstract visitNewExpression(node: ts.NewExpression): T;
   protected abstract visitPropertyAccessExpression(
     node: ts.PropertyAccessExpression
+  ): T;
+  protected abstract visitThisKeyword(
+    node: ts.KeywordToken<ts.SyntaxKind.ThisKeyword>
   ): T;
   protected abstract visitEndOfFileToken(node: ts.EndOfFileToken): T;
 }
