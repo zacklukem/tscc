@@ -4,37 +4,33 @@ import ts from "typescript";
 import llvm from "llvm-node";
 import { InternalError } from "./err";
 import { TypeVisitor } from "./type_visitor";
-
-class Scope<T> {
-  private values: Map<string, T>;
-  public readonly parent?: Scope<T>;
-
-  constructor(parent?: Scope<T>) {
-    this.values = new Map();
-    this.parent = parent;
-  }
-
-  public add(name: string, value: T) {
-    this.values.set(name, value);
-  }
-
-  public has(name: string) {
-    return this.values.has(name);
-  }
-
-  public get(name: string): T | undefined {
-    if (this.values.has(name)) return this.values.get(name);
-    if (!this.parent) return undefined;
-    return this.parent.get(name);
-  }
-}
+import { Scope } from "./scope";
+import { ClassTypeData } from "./infer_pass";
+import {
+  ALLOC_RC,
+  FREE_RC,
+  MOVE_RC,
+  classDestructorSymbol,
+  classConstructorSymbol,
+} from "./intrinsics";
 
 class GenTypeVisitor extends TypeVisitor<llvm.Type> {
-  ctx: llvm.LLVMContext;
+  private ctx: llvm.LLVMContext;
+  private _structs_scope: Scope<llvm.StructType>;
+
+  public get structs_scope(): Scope<llvm.StructType> {
+    return this._structs_scope;
+  }
+  public set structs_scope(value: Scope<llvm.StructType>) {
+    this._structs_scope = value;
+  }
+
   constructor(ctx: llvm.LLVMContext) {
     super();
     this.ctx = ctx;
+    this._structs_scope = new Scope();
   }
+
   protected visitNumberKeyword(
     _: ts.KeywordToken<ts.SyntaxKind.NumberKeyword>
   ): llvm.Type {
@@ -60,6 +56,25 @@ class GenTypeVisitor extends TypeVisitor<llvm.Type> {
   ): llvm.Type {
     return llvm.Type.getVoidTy(this.ctx);
   }
+
+  protected visitTypeLiteralNode(node: ts.TypeLiteralNode): llvm.Type {
+    let s = llvm.StructType.create(this.ctx, "anon");
+    let body = node.members.map((member) => {
+      let m = member as ts.PropertySignature;
+      if (!m.type) throw new InternalError("missing property type");
+      return this.visit(m.type);
+    });
+    s.setBody(body);
+    return llvm.PointerType.get(s, 0);
+  }
+
+  protected visitTypeReferenceNode(node: ts.TypeReferenceNode): llvm.Type {
+    let name = node.typeName;
+    let ty = this.structs_scope.get(name.getText());
+    if (!ty)
+      throw new InternalError("Type name not found, check previous pass");
+    return llvm.PointerType.get(ty, 0);
+  }
 }
 
 export class GenVisitor extends NodeVisitor<llvm.Value | undefined> {
@@ -71,6 +86,8 @@ export class GenVisitor extends NodeVisitor<llvm.Value | undefined> {
   /// @ts-ignore
   private current_file?: ts.SourceFile;
   private current_scope: Scope<llvm.Value>;
+  private structs_scope: Scope<llvm.StructType>;
+  private class_type_scope: Scope<ClassTypeData>;
 
   constructor() {
     super();
@@ -80,6 +97,8 @@ export class GenVisitor extends NodeVisitor<llvm.Value | undefined> {
     this.builder = new llvm.IRBuilder(this.ctx);
     this.pointer_mode = false;
     this.current_scope = new Scope();
+    this.structs_scope = new Scope();
+    this.class_type_scope = new Scope();
   }
 
   private enterScope() {
@@ -112,19 +131,61 @@ export class GenVisitor extends NodeVisitor<llvm.Value | undefined> {
     return builder.createAlloca(type, undefined, name);
   }
 
-  private genLibC() {
-    let func_type = llvm.FunctionType.get(
-      llvm.Type.getVoidTy(this.ctx),
-      [llvm.Type.getDoubleTy(this.ctx)],
-      false
-    );
-    let func = llvm.Function.create(
+  private genFunc(name: string, ret_type: llvm.Type, ...args: llvm.Type[]) {
+    let func_type = llvm.FunctionType.get(ret_type, args, false);
+    return llvm.Function.create(
       func_type,
       llvm.LinkageTypes.ExternalLinkage,
-      "printDouble",
+      name,
       this.mod
     );
+  }
+
+  private genLibC() {
+    // TODO: decide how to do this better
+
+    let func = this.genFunc(
+      "printDouble",
+      llvm.Type.getVoidTy(this.ctx),
+      llvm.Type.getDoubleTy(this.ctx)
+    );
     this.current_scope.add("printDouble", func);
+
+    this.genFunc(
+      ALLOC_RC,
+      llvm.Type.getInt8PtrTy(this.ctx),
+      llvm.Type.getInt64Ty(this.ctx)
+    );
+    this.genFunc(
+      MOVE_RC,
+      llvm.Type.getVoidTy(this.ctx),
+      llvm.Type.getInt8PtrTy(this.ctx)
+    );
+    this.genFunc(
+      FREE_RC,
+      llvm.Type.getVoidTy(this.ctx),
+      llvm.Type.getInt8PtrTy(this.ctx)
+    );
+  }
+
+  // @ts-ignore
+  private genCall(func_name: string, ...args: llvm.Value[]) {
+    let func = this.mod.getFunction(func_name);
+    if (!func) throw new InternalError("internal function issue");
+    if (!func?.type?.elementType)
+      throw new InternalError("internal function issue");
+    return this.builder.createCall(func?.type?.elementType, func, args);
+  }
+
+  private genAssign(expr: llvm.Value, alloca: llvm.Value) {
+    if (alloca.type.isPointerTy()) {
+      let alloca_pt = alloca.type as llvm.PointerType;
+      if (alloca_pt.elementType.isPointerTy() && expr.type.isPointerTy()) {
+        let bc = this.builder.createBitCast(expr, alloca_pt.elementType);
+        return this.builder.createStore(bc, alloca);
+      }
+    }
+    return this.builder.createStore(expr, alloca);
   }
 
   protected visitSourceFile(node: ts.SourceFile): undefined {
@@ -132,6 +193,11 @@ export class GenVisitor extends NodeVisitor<llvm.Value | undefined> {
     this.mod = new llvm.Module(node.fileName, this.ctx);
     this.mod.sourceFileName = node.fileName;
     this.current_scope = new Scope();
+    this.structs_scope = new Scope();
+    this.tv.structs_scope = this.structs_scope;
+    if (!node.metadata?.class_type_scope)
+      throw new InternalError("Missing class type scope (see previous pass)");
+    this.class_type_scope = node.metadata.class_type_scope;
     this.genLibC();
     node.forEachChild(this.visit);
     return undefined;
@@ -143,8 +209,11 @@ export class GenVisitor extends NodeVisitor<llvm.Value | undefined> {
     //     "Expected function return type inferred from previous pass"
     //   );
 
-    if (!node.body)
-      throw new InternalError("No-body functions not yet implemented");
+    if (!node.body) {
+      // TODO: add declarations or something
+      return undefined;
+      // throw new InternalError("No-body functions not yet implemented");
+    }
 
     this.enterScope();
 
@@ -194,7 +263,7 @@ export class GenVisitor extends NodeVisitor<llvm.Value | undefined> {
     this.builder.setInsertionPoint(init_bb);
     this.builder.createBr(bb);
 
-    llvm.verifyFunction(func);
+    // llvm.verifyFunction(func);
 
     this.exitScope();
     return undefined;
@@ -249,13 +318,14 @@ export class GenVisitor extends NodeVisitor<llvm.Value | undefined> {
   }
 
   protected visitVariableDeclaration(node: ts.VariableDeclaration): undefined {
-    if (!node.type)
+    if (!node.metadata?.infer_type) {
       throw new InternalError(
         "Variable declaration is missing type (should be checked in previous pass)"
       );
+    }
 
     let alloca = this.insertAlloca(
-      this.tv.visit(node.type),
+      this.tv.visit(node.metadata.infer_type),
       node.name.getText()
     );
 
@@ -265,7 +335,7 @@ export class GenVisitor extends NodeVisitor<llvm.Value | undefined> {
         throw new InternalError(
           "Initializer has no value (should be checked in previous pass)"
         );
-      this.builder.createStore(expr, alloca);
+      this.genAssign(expr, alloca);
     }
 
     this.current_scope.add(node.name.getText(), alloca);
@@ -319,7 +389,7 @@ export class GenVisitor extends NodeVisitor<llvm.Value | undefined> {
     if (!this.builder.getInsertBlock()?.getTerminator()) {
       this.builder.createBr(continue_b);
     }
-		this.builder.setInsertionPoint(continue_b);
+    this.builder.setInsertionPoint(continue_b);
 
     return undefined;
   }
@@ -415,7 +485,7 @@ export class GenVisitor extends NodeVisitor<llvm.Value | undefined> {
       let rhs = this.visit(node.right);
       if (!lhs) throw new InternalError("Lhs is not a value");
       if (!rhs) throw new InternalError("Rhs is not a value");
-      this.builder.createStore(rhs, lhs);
+      this.genAssign(rhs, lhs);
       return this.visit(node.left);
     }
     let lhs = this.visit(node.left);
@@ -576,6 +646,135 @@ export class GenVisitor extends NodeVisitor<llvm.Value | undefined> {
 
   protected visitEndOfFileToken(_node: ts.EndOfFileToken): undefined {
     return undefined;
+  }
+
+  protected visitObjectLiteralExpression(
+    _node: ts.ObjectLiteralExpression
+  ): llvm.Value {
+    throw new InternalError("Unimplemented");
+    // let values: [ts.PropertyName, llvm.Value][] = node.properties.map(
+    //   (prop) => {
+    //     let asn = prop as ts.PropertyAssignment;
+    //     let val = this.visit(asn.initializer);
+    //     if (!val) throw new InternalError("Expected value");
+    //     return [asn.name, val];
+    //   }
+    // );
+    // let size = values
+    //   .map((val) => val[1].type.getPrimitiveSizeInBits())
+    //   .reduce((a, b) => a + b, 0);
+
+    // return this.genCall(size);
+  }
+
+  protected visitClassDeclaration(node: ts.ClassDeclaration): undefined {
+    if (!node.name)
+      throw new InternalError("Class is missing name (see previous pass)");
+
+    let s = llvm.StructType.create(this.ctx, "class_" + node.name.getText());
+    let body = node.members.map((member) => {
+      if (member.kind === ts.SyntaxKind.PropertyDeclaration) {
+        let m = member as ts.PropertyDeclaration;
+        if (!m.type) throw new InternalError("missing property type");
+        return this.tv.visit(m.type);
+      }
+      throw new InternalError(
+        "other than class props all else not yet implemented"
+      );
+    });
+    s.setBody(body);
+    this.structs_scope.add(node.name.getText(), s);
+    let old_bb = this.builder.getInsertBlock();
+    let ptr_type = llvm.PointerType.get(s, 0);
+
+    // TODO: constructor args passthrough
+    {
+      // Constructor
+      let func = this.genFunc(
+        classConstructorSymbol(node.name.getText()),
+        ptr_type
+      );
+      let bb = llvm.BasicBlock.create(this.ctx, "constructor", func);
+      this.builder.setInsertionPoint(bb);
+
+      let size =
+        body
+          .map((val) => val.getPrimitiveSizeInBits())
+          .reduce((a, b) => a + b, 0) / 8;
+
+      let ptr = this.genCall(
+        ALLOC_RC,
+        llvm.ConstantInt.get(this.ctx, size, 64, false)
+      );
+      let bitcast = this.builder.createBitCast(ptr, ptr_type);
+      this.builder.createRet(bitcast);
+    }
+    {
+      // Destructor
+      let func = this.genFunc(
+        classDestructorSymbol(node.name.getText()),
+        llvm.Type.getVoidTy(this.ctx),
+        ptr_type
+      );
+      let bb = llvm.BasicBlock.create(this.ctx, "start", func);
+      this.builder.setInsertionPoint(bb);
+
+      // TODO: free members
+
+      let bitcast = this.builder.createBitCast(
+        func.getArguments()[0],
+        llvm.Type.getInt8PtrTy(this.ctx)
+      );
+      this.genCall(FREE_RC, bitcast);
+      this.builder.createRetVoid();
+    }
+
+    if (old_bb) this.builder.setInsertionPoint(old_bb);
+    return undefined;
+  }
+
+  protected visitNewExpression(node: ts.NewExpression): llvm.Value {
+    return this.genCall(
+      classConstructorSymbol((node.expression as ts.Identifier).getText())
+    );
+  }
+
+  protected visitPropertyAccessExpression(
+    node: ts.PropertyAccessExpression
+  ): llvm.Value {
+    let old_ptr_mode = this.pointer_mode;
+    this.pointer_mode = false;
+    let lhs = this.visit(node.expression); // lhs
+    this.pointer_mode = old_ptr_mode;
+    let rhs = node.name.getText();
+    if (!lhs?.type.isPointerTy())
+      throw new InternalError("lhs is not class or object");
+    let lhs_int = (lhs.type as llvm.PointerType).elementType;
+
+    if (!lhs_int?.isStructTy())
+      throw new InternalError("lhs is not class or object");
+    let lhs_str = lhs_int as llvm.StructType;
+    let str_name = lhs_str.name?.substring(6);
+
+    if (!str_name) throw new InternalError("Struct has no name");
+
+    let class_type = this.class_type_scope.get(str_name);
+    if (!class_type) throw new InternalError("Class type not found");
+    let member_index = class_type.members.get(rhs);
+    if (member_index === undefined)
+      // Number | undefined issue
+      throw new InternalError("Member not found (see previous pass)");
+
+    let gep = this.builder.createInBoundsGEP(
+      lhs_str,
+      lhs,
+      [
+        llvm.ConstantInt.get(this.ctx, member_index, 64, false)
+      ],
+      "struct_gep"
+    );
+    if (this.pointer_mode) return gep;
+    return this.builder.createLoad(gep, rhs + "_pae");
   }
 
   public print() {

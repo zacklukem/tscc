@@ -1,7 +1,5 @@
-declare module 'js-sha1' {
-  function sha1<T>(
-    dest: string | Array<T> | ArrayBuffer | Uint8Array
-  ): string;
+declare module "js-sha1" {
+  function sha1<T>(dest: string | Array<T> | ArrayBuffer | Uint8Array): string;
 
   namespace sha1 {
     export function hex(arg: string): string;
