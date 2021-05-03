@@ -1,3 +1,5 @@
+import { highlight } from "cli-highlight";
+
 export enum NodeKind {
   SourceFile,
   Ident,
@@ -19,6 +21,8 @@ export enum NodeKind {
   TypeDef,
   WhileStmt,
   ForStmt,
+  StringLiteral,
+  CastExpr,
 }
 
 export abstract class Node<T> {
@@ -26,69 +30,99 @@ export abstract class Node<T> {
   constructor(kind: NodeKind) {
     this.kind = kind;
   }
+
   isSourceFile(): this is SourceFile {
     return this.kind === NodeKind.SourceFile;
   }
+
   isIdent(): this is Ident {
     return this.kind === NodeKind.Ident;
   }
+
   isIdentLiteral(): this is IdentLiteral {
     return this.kind === NodeKind.IdentLiteral;
   }
+
   isNumberLiteral(): this is NumberLiteral {
     return this.kind === NodeKind.NumberLiteral;
   }
+
   isBinaryExpr(): this is BinaryExpr {
     return this.kind === NodeKind.BinaryExpr;
   }
+
   isUnaryExpr(): this is UnaryExpr {
     return this.kind === NodeKind.UnaryExpr;
   }
+
   isVarDeclStmt(): this is VarDeclStmt {
     return this.kind === NodeKind.VarDeclStmt;
   }
+
   isRefType(): this is RefType {
     return this.kind === NodeKind.RefType;
   }
+
   isIdentType(): this is IdentType {
     return this.kind === NodeKind.IdentType;
   }
+
   isStructType(): this is StructType {
     return this.kind === NodeKind.StructType;
   }
+
   isIfStmt(): this is IfStmt {
     return this.kind === NodeKind.IfStmt;
   }
+
   isBlock(): this is Block {
     return this.kind === NodeKind.Block;
   }
+
   isFunction(): this is Function {
     return this.kind === NodeKind.Function;
   }
+
   isExprStmt(): this is ExprStmt {
     return this.kind === NodeKind.ExprStmt;
   }
+
   isCallExpr(): this is CallExpr {
     return this.kind === NodeKind.CallExpr;
   }
+
   isReturnStmt(): this is ReturnStmt {
     return this.kind === NodeKind.ReturnStmt;
   }
+
   isStruct(): this is Struct {
     return this.kind === NodeKind.Struct;
   }
+
+  isCastExpr(): this is CastExpr {
+    return this.kind === NodeKind.CastExpr;
+  }
+
   isTypeDef(): this is TypeDef {
     return this.kind === NodeKind.TypeDef;
   }
+
   isWhileStmt(): this is WhileStmt {
     return this.kind === NodeKind.WhileStmt;
   }
+
   isForStmt(): this is ForStmt {
     return this.kind === NodeKind.ForStmt;
   }
+
+  isStringLiteral(): this is StringLiteral {
+    return this.kind === NodeKind.StringLiteral;
+  }
+
   isTopLevelStmt(): this is TopLevelStmt {
     return this.isFunction() || this.isStruct() || this.isTypeDef();
   }
+
   isStmt(): this is Stmt {
     return (
       this.isIfStmt() ||
@@ -100,13 +134,16 @@ export abstract class Node<T> {
       this.isWhileStmt()
     );
   }
+
   isExpr(): this is Expr {
     return (
       this.isBinaryExpr() ||
       this.isUnaryExpr() ||
       this.isCallExpr() ||
       this.isIdentLiteral() ||
-      this.isNumberLiteral()
+      this.isNumberLiteral() ||
+      this.isStringLiteral() ||
+      this.isCastExpr()
     );
   }
   abstract gen(): T;
@@ -149,9 +186,9 @@ export class SourceFile extends Node<void> {
   }
   print() {
     console.log("==== START HEADER ====");
-    console.log(this.getHeader());
+    console.log(highlight(this.getHeader(), {language: "c"}));
     console.log("==== START SOURCE ====");
-    console.log(this.getSource());
+    console.log(highlight(this.getSource(), {language: "c"}));
     // console.log(this.decl + "\n" + this.body);
   }
   getHeader() {
@@ -163,7 +200,8 @@ export class SourceFile extends Node<void> {
       "#include <stl.h>\n" +
       this.decl +
       "\n//== BODY SECTION ==//\n" +
-      this.body
+      this.body +
+      "\n#include <end.h>\n"
     );
   }
 }
@@ -436,6 +474,7 @@ type UnaryOperator =
   | TokenKind.Minus
   | TokenKind.Asterisk
   | TokenKind.Exclamation
+  | TokenKind.Ampersand
   | TokenKind.Tilde;
 
 export function isUnaryOperator(kind: TokenKind): kind is BinaryOperator {
@@ -457,6 +496,19 @@ export class UnaryExpr extends Expr {
   }
   gen(): string {
     return `(${this.operator}${this.operand})`;
+  }
+}
+
+export class CastExpr extends Expr {
+  readonly type: Type;
+  readonly expression: Expr;
+  constructor(src: SourceFile, type: Type, expression: Expr) {
+    super(src, NodeKind.CastExpr);
+    this.type = type;
+    this.expression = expression;
+  }
+  gen(): string {
+    return `(${this.type.gen()})(${this.expression.gen()})`;
   }
 }
 
@@ -490,6 +542,17 @@ export class NumberLiteral extends Expr {
   readonly value: string;
   constructor(src: SourceFile, value: string) {
     super(src, NodeKind.NumberLiteral);
+    this.value = value;
+  }
+  gen(): string {
+    return this.value;
+  }
+}
+
+export class StringLiteral extends Expr {
+  readonly value: string;
+  constructor(src: SourceFile, value: string) {
+    super(src, NodeKind.StringLiteral);
     this.value = value;
   }
   gen(): string {
@@ -628,6 +691,7 @@ export class Factory {
   constructor(src: SourceFile) {
     this.src = src;
   }
+
   createFunction(
     modifiers: FunctionModifiers,
     in_header: boolean,
@@ -646,60 +710,86 @@ export class Factory {
       body
     );
   }
+
   createIdent(value: string) {
     return new Ident(this.src, value);
   }
+
   createIdentType(value: Ident | string) {
     let v_id = typeof value === "string" ? new Ident(this.src, value) : value;
     return new IdentType(this.src, v_id);
   }
+
   createStructType(value: Ident | string) {
     let v_id = typeof value === "string" ? new Ident(this.src, value) : value;
     return new StructType(this.src, v_id);
   }
+
   createRefType(type: Type) {
     return new RefType(this.src, type);
   }
+
   createBinaryExpr(lhs: Expr, operator: BinaryOperator, rhs: Expr) {
     return new BinaryExpr(this.src, lhs, operator, rhs);
   }
+
   createUnaryExpr(operator: UnaryOperator, operand: Expr) {
     return new UnaryExpr(this.src, operator, operand);
   }
+
   createCallExpr(expression: Expr, parameters: Expr[]) {
     return new CallExpr(this.src, expression, parameters);
   }
+
   createIdentLiteral(value: Ident | string) {
     let v_id = typeof value === "string" ? new Ident(this.src, value) : value;
     return new IdentLiteral(this.src, v_id);
   }
+
   createNumberLiteral(value: string) {
     return new NumberLiteral(this.src, value);
   }
+
   createBlock(statements: Stmt[]) {
     return new Block(this.src, statements);
   }
+
   createVarDeclStmt(type: Type, name: Ident, initializer?: Expr) {
     return new VarDeclStmt(this.src, type, name, initializer);
   }
+
   createIfStmt(condition: Expr, body: Stmt, then?: Block | IfStmt) {
     return new IfStmt(this.src, condition, body, then);
   }
+
   createExprStmt(expression: Expr) {
     return new ExprStmt(this.src, expression);
   }
+
   createReturnStmt(expression?: Expr) {
     return new ReturnStmt(this.src, expression);
   }
+
   createStruct(name: Ident, members: [Type, Ident][]) {
     return new Struct(this.src, name, members);
   }
+
   createTypeDef(ret_type: Type, name: Ident, parameters: [Type, Ident][]) {
     return new TypeDef(this.src, ret_type, name, parameters);
   }
+
   createWhileStmt(condition: Expr, body: Stmt) {
     return new WhileStmt(this.src, condition, body);
   }
+
+  createStringLiteral(value: string) {
+    return new StringLiteral(this.src, value);
+  }
+
+  createCastExpr(type: Type, expression: Expr) {
+    return new CastExpr(this.src, type, expression);
+  }
+
   createForStmt(
     condition: Expr,
     body: Stmt,

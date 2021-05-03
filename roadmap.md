@@ -19,6 +19,7 @@
   - Numbers, classes etc, but not optional, readonly etc
 - [x] Primitive methods
 - [x] Constructors
+- [ ] Memory free and move instructions
 - [ ] Method modifiers
 - [ ] Advanced members with modifiers
 - [ ] Inheritance

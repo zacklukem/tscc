@@ -57,8 +57,14 @@ export abstract class NodeVisitor<T> {
         return this.visitThisKeyword(
           node as ts.KeywordToken<ts.SyntaxKind.ThisKeyword>
         );
+      case ts.SyntaxKind.StringLiteral:
+        return this.visitStringLiteral(node as ts.StringLiteral);
+      case ts.SyntaxKind.ArrayLiteralExpression:
+        return this.visitArrayLiteralExpression(node as ts.ArrayLiteralExpression);
       case ts.SyntaxKind.EndOfFileToken:
         return this.visitEndOfFileToken(node as ts.EndOfFileToken);
+      case ts.SyntaxKind.ElementAccessExpression:
+        return this.visitElementAccessExpression(node as ts.ElementAccessExpression);
     }
     throw new Error(
       `Unhandled type: ${ts.SyntaxKind[node.kind]} = ${node.kind}`
@@ -101,5 +107,8 @@ export abstract class NodeVisitor<T> {
   protected abstract visitThisKeyword(
     node: ts.KeywordToken<ts.SyntaxKind.ThisKeyword>
   ): T;
+  protected abstract visitStringLiteral(node: ts.StringLiteral): T;
   protected abstract visitEndOfFileToken(node: ts.EndOfFileToken): T;
+  protected abstract visitArrayLiteralExpression(node: ts.ArrayLiteralExpression): T;
+  protected abstract visitElementAccessExpression(node: ts.ElementAccessExpression): T;
 }

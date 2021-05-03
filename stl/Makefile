@@ -1,12 +1,18 @@
+BUILD_DIR := ./build
+
 SRCS :=\
-	print_double.c\
-	rc.c
+	src/print_double.c\
+	src/rc.c\
+	src/string.c\
+	src/number.c\
+	src/console.c\
+	src/array.c
 
-OBJS := $(SRCS:%=%.o)
-
+OBJS := $(SRCS:%=$(BUILD_DIR)/%.o)
 
 stl.a: $(OBJS)
 	ar -rc $@ $(OBJS)
 
-%.c.o: %.c
-	$(CC) $(CFLAGS) -c $< -o $@
+$(BUILD_DIR)/%.c.o: %.c
+	mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -c $< -o $@ -Iinclude

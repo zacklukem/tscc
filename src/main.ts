@@ -18,6 +18,10 @@ fileNames.forEach((fileName) => {
 
   const infer_pass = new InferPass();
   infer_pass.visit(sourceFile);
+  if (infer_pass.e.hasErrors()) {
+    infer_pass.e.print(sourceFile);
+    return;
+  }
   const gen_pass = new CGenPass();
   const node = gen_pass.visit(sourceFile);
   if (!node) throw new InternalError("wtf");

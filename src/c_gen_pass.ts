@@ -2,15 +2,67 @@ import { NodeVisitor } from "./visitor";
 import * as c from "./c_factory";
 import ts from "typescript";
 import { InternalError } from "./err";
-import { TypeVisitor } from "./type_visitor";
+import { NewTypeVisitor, TypeVisitor } from "./type_visitor";
+import * as ty from "./types";
 import sha1 from "js-sha1";
 
-export class CTypeGenPass extends TypeVisitor<c.Type> {
+export class TypeGenPass extends NewTypeVisitor<c.Type> {
   private factory: c.Factory;
+
   constructor(factory: c.Factory) {
     super();
     this.factory = factory;
   }
+
+
+  protected visitClassType(node: ty.ClassType): c.Type {
+    return this.factory.createRefType(this.factory.createStructType(node.name));
+  }
+
+  protected visitStringType(_node: ty.StringType): c.Type {
+    return this.factory.createRefType(this.factory.createStructType("String"));
+  }
+
+  protected visitNumberType(_node: ty.NumberType): c.Type {
+    return this.factory.createIdentType("double");
+  }
+
+  protected visitFunctionType(node: ty.FunctionType): c.Type {
+    let ret_type = this.visit(node.return_type);
+    let name =
+      "_" +
+      ret_type.gen().replace(/[^A-Za-z0-9]/g, "") +
+      "_" +
+      node.sha?.substr(0, 10);
+    this.factory.src.addTopLevelStmt(
+      this.factory.createTypeDef(ret_type, this.factory.createIdent(name), [])
+    );
+    return this.factory.createIdentType(name);
+  }
+
+  protected visitAnonymousFunctionType(
+    _node: ty.AnonymousFunctionType
+  ): c.Type {
+    throw new InternalError("not yet implemented");
+  }
+
+  protected visitArray(_node: ty.ArrayType): c.Type {
+    return this.factory.createRefType(this.factory.createStructType("Array"));
+  }
+
+  protected visitVoidType(_node: ty.VoidType): c.Type {
+    return this.factory.createIdentType("void");
+  }
+}
+
+export class CTypeGenPass extends TypeVisitor<c.Type> {
+  private factory: c.Factory;
+
+  constructor(factory: c.Factory) {
+    super();
+    this.factory = factory;
+  }
+
   protected visitNumberKeyword(
     _node: ts.KeywordToken<ts.SyntaxKind.NumberKeyword>
   ): c.Type {
@@ -45,23 +97,34 @@ export class CTypeGenPass extends TypeVisitor<c.Type> {
       this.factory.createStructType(node.typeName.getText())
     );
   }
+
+  protected visitStringKeyword(_node: ts.KeywordToken<ts.SyntaxKind.StringKeyword>): c.Type {
+    return this.factory.createRefType(this.factory.createStructType("String"));
+  }
+
+  protected visitArrayTypeNode(_node: ts.ArrayTypeNode): c.Type {
+    return this.factory.createRefType(this.factory.createStructType("Array"));
+  }
 }
 
 export class CGenPass extends NodeVisitor<c.Node<any> | undefined> {
   private factory: c.Factory;
   private source_file: c.SourceFile;
+  private ntv: TypeGenPass;
   private tv: CTypeGenPass;
   constructor() {
     super();
     this.source_file = new c.SourceFile();
     this.factory = new c.Factory(new c.SourceFile());
     this.tv = new CTypeGenPass(this.factory);
+    this.ntv = new TypeGenPass(this.factory);
   }
 
   protected visitSourceFile(node: ts.SourceFile): c.Node<any> {
     this.source_file = new c.SourceFile();
     this.factory = new c.Factory(this.source_file);
     this.tv = new CTypeGenPass(this.factory);
+    this.ntv = new TypeGenPass(this.factory);
     node.forEachChild((n) => {
       if (n.kind == ts.SyntaxKind.EndOfFileToken) return;
       let tls = this.visit(n);
@@ -86,7 +149,7 @@ export class CGenPass extends NodeVisitor<c.Node<any> | undefined> {
     return this.factory.createFunction(
       0,
       true, // TODO: check for extern
-      this.tv.visit(node.type),
+      this.tv.visit(node.type), // TODO: maybe switch this to use NewType
       this.factory.createIdent(node.name.getText()),
       node.parameters.map((param) => {
         if (!param.type) throw new InternalError("Missing param type");
@@ -149,7 +212,7 @@ export class CGenPass extends NodeVisitor<c.Node<any> | undefined> {
     if (!node.metadata?.infer_type)
       throw new InternalError("Missing type (see previous pass)");
     return this.factory.createVarDeclStmt(
-      this.tv.visit(node.metadata.infer_type),
+      this.ntv.visit(node.metadata.infer_type),
       this.factory.createIdent(node.name.getText()),
       node.initializer ? (this.visit(node.initializer) as c.Expr) : undefined
     );
@@ -271,7 +334,24 @@ export class CGenPass extends NodeVisitor<c.Node<any> | undefined> {
   }
 
   protected visitCallExpression(node: ts.CallExpression): c.CallExpr {
-    let args = node.arguments.map((expr) => this.visit(expr) as c.Expr);
+    let args = node.arguments.map((expr) => {
+      let v = this.visit(expr) as c.Expr;
+      if (expr.metadata?.bitcast)
+        v = this.factory.createCallExpr(
+          this.factory.createIdentLiteral(
+            "__internal__f64_to_u64"
+          ),
+          [v]
+        );
+      if (expr.metadata?.cast_to)
+        v = this.factory.createCallExpr(
+          this.factory.createIdentLiteral(
+            expr.metadata.cast_to + "_constructor"
+          ),
+          [v]
+        );
+      return v;
+    });
     if (node.metadata?.this_passthrough) {
       args.unshift(this.visit(node.metadata.this_passthrough) as c.Expr);
     }
@@ -300,7 +380,7 @@ export class CGenPass extends NodeVisitor<c.Node<any> | undefined> {
     let func = this.factory.createFunction(
       0,
       false, // TODO: check for extern
-      this.tv.visit(node.type),
+      this.tv.visit(node.type), // TODO: perhaps use new types
       this.factory.createIdent(name),
       node.parameters.map((param) => {
         if (!param.type) throw new InternalError("Missing param type");
@@ -524,8 +604,57 @@ export class CGenPass extends NodeVisitor<c.Node<any> | undefined> {
   ): c.IdentLiteral {
     return this.factory.createIdentLiteral("this");
   }
+  protected visitStringLiteral(node: ts.StringLiteral): c.CallExpr {
+    return this.factory.createCallExpr(
+      this.factory.createIdentLiteral("String_constructor"),
+      [this.factory.createStringLiteral(node.getText())]
+    );
+  }
+
+  protected visitArrayLiteralExpression(
+    node: ts.ArrayLiteralExpression
+  ): c.CallExpr {
+    if (!node.metadata?.infer_type?.isArray())
+      throw new InternalError("Missing infer type (see previous pass)");
+    return this.factory.createCallExpr(
+      this.factory.createIdentLiteral("Array_constructor"),
+      [
+        this.factory.createCallExpr(this.factory.createIdentLiteral("sizeof"), [
+          this.factory.createIdentLiteral(
+            this.ntv.visit(node.metadata.infer_type.element_type).gen()
+          ),
+        ]),
+      ]
+    );
+  }
 
   protected visitEndOfFileToken(_node: ts.EndOfFileToken): undefined {
     return undefined;
+  }
+
+  protected visitElementAccessExpression(
+    node: ts.ElementAccessExpression
+  ): c.Expr {
+    let arr = this.visit(node.expression);
+    if (!arr) throw new InternalError("arr must be a value");
+    let accessor = this.visit(node.argumentExpression);
+    if (!accessor) throw new InternalError("accessor must be a value");
+    if (!node.metadata?.infer_type)
+      throw new InternalError("un-inferred type (see previous pass)");
+    let call = this.factory.createCallExpr(
+      this.factory.createBinaryExpr(
+        arr as c.Expr,
+        c.TokenKind.MinusGreater,
+        this.factory.createIdentLiteral("__internal__get")
+      ),
+      [arr as c.Expr, accessor as c.Expr]
+    );
+    return this.factory.createUnaryExpr(
+      c.TokenKind.Asterisk,
+      this.factory.createCastExpr(
+        this.factory.createRefType(this.ntv.visit(node.metadata.infer_type)),
+        call
+      )
+    );
   }
 }
