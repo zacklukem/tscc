@@ -18,11 +18,18 @@ export enum NodeKind {
   CallExpr,
   ReturnStmt,
   Struct,
-  TypeDef,
+  FunctionType,
   WhileStmt,
   ForStmt,
   StringLiteral,
   CastExpr,
+  ClassFieldMember,
+  LambdaExpr,
+  ClassDecl,
+  Method,
+  GenericType,
+  ArrayAccess,
+  InitializerListExpr,
 }
 
 export abstract class Node<T> {
@@ -103,8 +110,8 @@ export abstract class Node<T> {
     return this.kind === NodeKind.CastExpr;
   }
 
-  isTypeDef(): this is TypeDef {
-    return this.kind === NodeKind.TypeDef;
+  isFunctionType(): this is FunctionType {
+    return this.kind === NodeKind.FunctionType;
   }
 
   isWhileStmt(): this is WhileStmt {
@@ -119,8 +126,12 @@ export abstract class Node<T> {
     return this.kind === NodeKind.StringLiteral;
   }
 
+  isLambdaExpr(): this is LambdaExpr {
+    return this.kind === NodeKind.LambdaExpr;
+  }
+
   isTopLevelStmt(): this is TopLevelStmt {
-    return this.isFunction() || this.isStruct() || this.isTypeDef();
+    return this.isFunction() || this.isStruct();
   }
 
   isStmt(): this is Stmt {
@@ -143,6 +154,7 @@ export abstract class Node<T> {
       this.isIdentLiteral() ||
       this.isNumberLiteral() ||
       this.isStringLiteral() ||
+      this.isLambdaExpr() ||
       this.isCastExpr()
     );
   }
@@ -186,9 +198,9 @@ export class SourceFile extends Node<void> {
   }
   print() {
     console.log("==== START HEADER ====");
-    console.log(highlight(this.getHeader(), {language: "c"}));
+    console.log(highlight(this.getHeader(), { language: "c" }));
     console.log("==== START SOURCE ====");
-    console.log(highlight(this.getSource(), {language: "c"}));
+    console.log(highlight(this.getSource(), { language: "c" }));
     // console.log(this.decl + "\n" + this.body);
   }
   getHeader() {
@@ -233,6 +245,7 @@ export enum TokenKind {
   EqualsEquals = "==",
   Exclamation = "!",
   ExclamationEquals = "!=",
+  ColonColon = "::",
 }
 
 export abstract class TopLevelStmt extends Node<void> {
@@ -244,57 +257,143 @@ export abstract class TopLevelStmt extends Node<void> {
   abstract gen(): void;
 }
 
-export class TypeDef extends TopLevelStmt {
+export abstract class ClassMember extends Node<void> {
+  abstract gen_decl(): string;
+  abstract gen_src(): string;
+  gen(): void {}
+  constructor(kind: NodeKind) {
+    super(kind);
+  }
+}
+
+export class ClassFieldMember extends ClassMember {
+  readonly type: Type;
+  readonly ident: Ident;
+  constructor(type: Type, ident: Ident) {
+    super(NodeKind.ClassFieldMember);
+    this.type = type;
+    this.ident = ident;
+  }
+  gen_decl(): string {
+    return `${this.type.gen()} ${this.ident.gen()};`;
+  }
+  gen_src(): string {
+    return "";
+  }
+}
+
+export class ClassMethod extends ClassMember {
+  readonly modifiers: FunctionModifiers;
   readonly ret_type: Type;
+  readonly parent_name: Ident;
   readonly name: Ident;
   readonly parameters: [Type, Ident][];
+  readonly body: Block;
 
   constructor(
-    src: SourceFile,
+    modifiers: FunctionModifiers,
     ret_type: Type,
+    parent_name: Ident,
     name: Ident,
-    parameters: [Type, Ident][]
+    parameters: [Type, Ident][],
+    body: Block
   ) {
-    super(src, NodeKind.TypeDef);
+    super(NodeKind.Method);
+    this.modifiers = modifiers;
     this.ret_type = ret_type;
+    this.parent_name = parent_name;
     this.name = name;
     this.parameters = parameters;
+    this.body = body;
   }
-  gen(): void {
-    // TODO: function modifiers
+  gen_decl(): string {
     let parameters = this.parameters
       .map((v) => `${v[0].gen()} ${v[1].gen()}`)
       .join(", ");
-    this.src.addType(
-      `typedef ${this.ret_type.gen()} (*${this.name.gen()})(${parameters});\n`
-    );
+    let signature = `${this.ret_type.gen()} ${this.name.gen()}(${parameters})`;
+    return signature + ";\n";
+  }
+  gen_src(): string {
+    let parameters = this.parameters
+      .map((v) => `${v[0].gen()} ${v[1].gen()}`)
+      .join(", ");
+    let signature = `${this.ret_type.gen()} ${this.parent_name.gen()}::${this.name.gen()}(${parameters})`;
+    let body = this.body.gen();
+    return `${signature} ${body}\n\n`;
+  }
+}
+
+export class ClassConstructor extends ClassMember {
+  readonly modifiers: FunctionModifiers;
+  readonly parent_name: Ident;
+  readonly parameters: [Type, Ident][];
+  readonly body: Block;
+
+  constructor(
+    modifiers: FunctionModifiers,
+    parent_name: Ident,
+    parameters: [Type, Ident][],
+    body: Block
+  ) {
+    super(NodeKind.Method);
+    this.modifiers = modifiers;
+    this.parent_name = parent_name;
+    this.parameters = parameters;
+    this.body = body;
+  }
+  gen_decl(): string {
+    let parameters = this.parameters
+      .map((v) => `${v[0].gen()} ${v[1].gen()}`)
+      .join(", ");
+    let signature = `${this.parent_name.gen()}(${parameters})`;
+    return signature + ";\n";
+  }
+  gen_src(): string {
+    let parameters = this.parameters
+      .map((v) => `${v[0].gen()} ${v[1].gen()}`)
+      .join(", ");
+    let signature = `${this.parent_name.gen()}::${this.parent_name.gen()}(${parameters})`;
+    let body = this.body.gen();
+    return `${signature} ${body}\n\n`;
   }
 }
 
 export class Struct extends TopLevelStmt {
   readonly name: Ident;
-  readonly members: [Type, Ident][];
-  constructor(src: SourceFile, name: Ident, members: [Type, Ident][]) {
+  readonly members: ClassMember[];
+  constructor(src: SourceFile, name: Ident, members: ClassMember[]) {
     super(src, NodeKind.Struct);
     this.name = name;
     this.members = members;
   }
   gen(): void {
-    let members = this.members
-      .map((v) => `  ${v[0].gen()} ${v[1].gen()};\n`)
-      .join("");
+    let members = this.members.map((v) => `  ${v.gen_decl()}\n`).join("");
     this.src.addType(`struct ${this.name.gen()};\n`);
-    this.src.addType(
-      `typedef struct ${this.name.gen()} ${this.name.gen()}_t;\n`
-    );
     this.src.addDeclaration(`struct ${this.name.gen()} {\n${members}};\n`);
   }
 }
 
-enum FunctionModifiers {
-  Static = 1 << 0,
-  Inline = 1 << 1,
+export class ClassDecl extends TopLevelStmt {
+  readonly name: Ident;
+  readonly members: ClassMember[];
+  constructor(src: SourceFile, name: Ident, members: ClassMember[]) {
+    super(src, NodeKind.ClassDecl);
+    this.name = name;
+    this.members = members;
+  }
+  gen(): void {
+    this.members.forEach((member) => {
+      this.src.addToBody(member.gen_src());
+    });
+    let members = this.members.map((v) => `  ${v.gen_decl()}\n`).join("");
+    this.src.addType(`class ${this.name.gen()};\n`);
+    this.src.addDeclaration(
+      `class ${this.name.gen()} {\npublic:\n${members}};\n`
+    );
+  }
 }
+
+enum FunctionModifiers {}
 
 export class Function extends TopLevelStmt {
   readonly modifiers: FunctionModifiers;
@@ -356,14 +455,49 @@ export abstract class Type extends Node<string> {
   abstract gen(): string;
 }
 
-export class IdentType extends Type {
-  readonly ident: Ident;
-  constructor(src: SourceFile, ident: Ident) {
-    super(src, NodeKind.IdentType);
-    this.ident = ident;
+export class FunctionType extends Type {
+  readonly ret_type: Type;
+  readonly parameters: Type[];
+
+  constructor(src: SourceFile, ret_type: Type, parameters: Type[]) {
+    super(src, NodeKind.FunctionType);
+    this.ret_type = ret_type;
+    this.parameters = parameters;
   }
   gen(): string {
-    return this.ident.gen();
+    // TODO: function modifiers
+    let parameters = this.parameters.map((v) => v.gen()).join(", ");
+    return `std::function<${this.ret_type.gen()}(${parameters})>`;
+  }
+}
+
+export class GenericType extends Type {
+  readonly type: Type;
+  readonly generics: Type[];
+  constructor(src: SourceFile, type: Type, generics: Type[]) {
+    super(src, NodeKind.GenericType);
+    this.type = type;
+    this.generics = generics;
+  }
+  gen(): string {
+    return `${this.type.gen()}<${this.generics
+      .map((g) => g.gen())
+      .join(", ")}>`;
+  }
+}
+
+export class IdentType extends Type {
+  readonly ident: Ident;
+  readonly namespace?: IdentType;
+  constructor(src: SourceFile, ident: Ident, namespace?: IdentType) {
+    super(src, NodeKind.IdentType);
+    this.ident = ident;
+    this.namespace = namespace;
+  }
+  gen(): string {
+    return (
+      (this.namespace ? `${this.namespace.gen()}::` : "") + this.ident.gen()
+    );
   }
 }
 
@@ -374,7 +508,7 @@ export class StructType extends Type {
     this.ident = ident;
   }
   gen(): string {
-    return `${this.ident.gen()}_t`;
+    return `${this.ident.gen()}`;
   }
 }
 
@@ -385,7 +519,7 @@ export class RefType extends Type {
     this.element_type = element_type;
   }
   gen(): string {
-    return `${this.element_type.gen()}*`;
+    return `std::shared_ptr<${this.element_type.gen()}>`;
   }
 }
 
@@ -396,6 +530,36 @@ export abstract class Expr extends Node<string> {
     this.src = src;
   }
   abstract gen(): string;
+}
+
+export class LambdaExpr extends Expr {
+  readonly ret_type: Type;
+  // readonly name: Ident;
+  readonly parameters: [Type, Ident][];
+  readonly body: Block;
+
+  constructor(
+    src: SourceFile,
+    // modifiers: FunctionModifiers,
+    // in_header: boolean,
+    ret_type: Type,
+    // name: Ident,
+    parameters: [Type, Ident][],
+    body: Block
+  ) {
+    super(src, NodeKind.Function);
+    // this.modifiers = modifiers;
+    // this.in_header = in_header;
+    this.ret_type = ret_type;
+    // this.name = name;
+    this.parameters = parameters;
+    this.body = body;
+  }
+  gen(): string {
+    return `[](${this.parameters
+      .map((p) => p[0].gen() + " " + p[1].gen())
+      .join(", ")}) -> ${this.ret_type.gen()} ${this.body.gen()}`;
+  }
 }
 
 type BinaryOperator =
@@ -423,7 +587,8 @@ type BinaryOperator =
   | TokenKind.BarBar
   | TokenKind.Equals
   | TokenKind.EqualsEquals
-  | TokenKind.ExclamationEquals;
+  | TokenKind.ExclamationEquals
+  | TokenKind.ColonColon;
 
 export function isBinaryOperator(kind: TokenKind): kind is BinaryOperator {
   return (
@@ -451,7 +616,8 @@ export function isBinaryOperator(kind: TokenKind): kind is BinaryOperator {
     kind === TokenKind.BarBar ||
     kind === TokenKind.Equals ||
     kind === TokenKind.EqualsEquals ||
-    kind === TokenKind.ExclamationEquals
+    kind === TokenKind.ExclamationEquals ||
+    kind === TokenKind.ColonColon
   );
 }
 
@@ -466,6 +632,11 @@ export class BinaryExpr extends Expr {
     this.rhs = rhs;
   }
   gen(): string {
+    if (
+      this.operator === TokenKind.ColonColon ||
+      this.operator === TokenKind.MinusGreater
+    )
+      return `${this.lhs.gen()}${this.operator}${this.rhs.gen()}`;
     return `(${this.lhs.gen()} ${this.operator} ${this.rhs.gen()})`;
   }
 }
@@ -486,6 +657,19 @@ export function isUnaryOperator(kind: TokenKind): kind is BinaryOperator {
   );
 }
 
+export class ArrayAccess extends Expr {
+  readonly expression: Expr;
+  readonly accessor: Expr;
+  constructor(src: SourceFile, expression: Expr, accessor: Expr) {
+    super(src, NodeKind.ArrayAccess);
+    this.expression = expression;
+    this.accessor = accessor;
+  }
+  gen(): string {
+    return `${this.expression.gen()}[${this.accessor.gen()}]`;
+  }
+}
+
 export class UnaryExpr extends Expr {
   readonly operator: UnaryOperator;
   readonly operand: Expr;
@@ -495,7 +679,7 @@ export class UnaryExpr extends Expr {
     this.operand = operand;
   }
   gen(): string {
-    return `(${this.operator}${this.operand})`;
+    return `(${this.operator}${this.operand.gen()})`;
   }
 }
 
@@ -515,15 +699,41 @@ export class CastExpr extends Expr {
 export class CallExpr extends Expr {
   readonly expression: Expr;
   readonly parameters: Expr[];
-  constructor(src: SourceFile, expression: Expr, parameters: Expr[]) {
+  readonly generics: Type[];
+  constructor(
+    src: SourceFile,
+    expression: Expr,
+    parameters: Expr[],
+    generics?: Type[]
+  ) {
     super(src, NodeKind.CallExpr);
     this.expression = expression;
     this.parameters = parameters;
+    this.generics = generics || [];
   }
   gen(): string {
-    return `${this.expression.gen()}(${this.parameters
-      .map((v) => v.gen())
-      .join(", ")})`;
+    return (
+      `${this.expression.gen()}` +
+      (this.generics.length > 0
+        ? `<${this.generics.map((n) => n.gen()).join(", ")}>`
+        : "") +
+      `(${this.parameters.map((v) => v.gen()).join(", ")})`
+    );
+  }
+}
+
+export class InitializerListExpr extends Expr {
+  readonly type: Type;
+  readonly initializers: Expr[];
+  constructor(src: SourceFile, type: Type, initializers: Expr[]) {
+    super(src, NodeKind.InitializerListExpr);
+    this.type = type;
+    this.initializers = initializers;
+  }
+  gen(): string {
+    return `std::initializer_list<${this.type.gen()}> {${this.initializers
+      .map((n) => n.gen())
+      .join(", ")}}`;
   }
 }
 
@@ -667,9 +877,10 @@ export class ForStmt extends Stmt {
     this.body = body;
   }
   gen(): string {
-    return `for (${
-      this.initializer ? this.initializer.gen() : "/*none*/;"
-    }${this.condition.gen()};${
+    return `for (${(this.initializer
+      ? this.initializer.gen()
+      : "/*none*/;"
+    ).replace("\n", "")} ${this.condition.gen()}; ${
       this.incrementor ? this.incrementor.gen() : "/*none*/"
     }) ${this.body.gen()}`;
   }
@@ -710,14 +921,36 @@ export class Factory {
       body
     );
   }
+  createLambdaExpr(
+    // modifiers: FunctionModifiers,
+    // in_header: boolean,
+    ret_type: Type,
+    // name: Ident,
+    parameters: [Type, Ident][],
+    body: Block
+  ): LambdaExpr {
+    return new LambdaExpr(
+      this.src,
+      // modifiers,
+      // in_header,
+      ret_type,
+      // name,
+      parameters,
+      body
+    );
+  }
 
   createIdent(value: string) {
     return new Ident(this.src, value);
   }
 
-  createIdentType(value: Ident | string) {
+  createIdentType(value: Ident | string, namespace?: IdentType) {
     let v_id = typeof value === "string" ? new Ident(this.src, value) : value;
-    return new IdentType(this.src, v_id);
+    return new IdentType(this.src, v_id, namespace);
+  }
+
+  createGenericType(type: Type, generics: Type[]) {
+    return new GenericType(this.src, type, generics);
   }
 
   createStructType(value: Ident | string) {
@@ -737,8 +970,8 @@ export class Factory {
     return new UnaryExpr(this.src, operator, operand);
   }
 
-  createCallExpr(expression: Expr, parameters: Expr[]) {
-    return new CallExpr(this.src, expression, parameters);
+  createCallExpr(expression: Expr, parameters: Expr[], generics?: Type[]) {
+    return new CallExpr(this.src, expression, parameters, generics);
   }
 
   createIdentLiteral(value: Ident | string) {
@@ -770,12 +1003,16 @@ export class Factory {
     return new ReturnStmt(this.src, expression);
   }
 
-  createStruct(name: Ident, members: [Type, Ident][]) {
+  createStruct(name: Ident, members: ClassMember[]) {
     return new Struct(this.src, name, members);
   }
 
-  createTypeDef(ret_type: Type, name: Ident, parameters: [Type, Ident][]) {
-    return new TypeDef(this.src, ret_type, name, parameters);
+  createClassDecl(name: Ident, members: ClassMember[]) {
+    return new ClassDecl(this.src, name, members);
+  }
+
+  createFunctionType(ret_type: Type, parameters: Type[]) {
+    return new FunctionType(this.src, ret_type, parameters);
   }
 
   createWhileStmt(condition: Expr, body: Stmt) {
@@ -788,6 +1025,14 @@ export class Factory {
 
   createCastExpr(type: Type, expression: Expr) {
     return new CastExpr(this.src, type, expression);
+  }
+
+  createInitializerListExpr(type: Type, initializers: Expr[]) {
+    return new InitializerListExpr(this.src, type, initializers);
+  }
+
+  createArrayAccess(expression: Expr, accessor: Expr) {
+    return new ArrayAccess(this.src, expression, accessor);
   }
 
   createForStmt(

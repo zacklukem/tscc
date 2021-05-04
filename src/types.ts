@@ -1,3 +1,5 @@
+import { InternalError } from "./err";
+
 export enum TypeKind {
   Class,
   String,
@@ -6,7 +8,8 @@ export enum TypeKind {
   Void,
   AnonymousFunction,
   Any,
-  Array
+  Array,
+  Generic,
 }
 
 // Named member class
@@ -21,6 +24,10 @@ export abstract class Type {
   }
 
   abstract toString(): string;
+
+  isGeneric(): this is GenericContainer {
+    return this.kind === TypeKind.Generic;
+  }
 
   isClass(): this is ClassType {
     return this.kind === TypeKind.Class;
@@ -57,6 +64,25 @@ export abstract class Type {
   isAny(): this is AnyType {
     return this.kind === TypeKind.Any;
   }
+
+  containsGenerics(): boolean {
+    if (this.isGeneric()) return true;
+    if (this.isArray()) return this.element_type.containsGenerics();
+    // TODO: expand this more
+    return false;
+  }
+
+  resolveGenerics(other: Type) {
+    if (!this.containsGenerics()) return;
+    if (this.isGeneric()) {
+      this.setEvaluatedType(other);
+    }
+    if (this.isArray() && other.isArray()) {
+      if (this.element_type.isGeneric()) {
+        this.element_type.setEvaluatedType(other.element_type);
+      }
+    }
+  }
 }
 
 export interface ClassMember {
@@ -64,22 +90,49 @@ export interface ClassMember {
   type: Type;
 }
 
+export class GenericContainer extends Type {
+  evaluated_type?: Type;
+
+  setEvaluatedType(type: Type) {
+    this.evaluated_type = type;
+  }
+
+  toString() {
+    return this.evaluated_type?.toString() || "<Unevaluated Generic Type>";
+  }
+
+  isCompatibleWith(other: Type) {
+    if (!this.evaluated_type) throw new InternalError("Unevaluated generic");
+    return this.evaluated_type.isCompatibleWith(other);
+  }
+  constructor() {
+    super(TypeKind.Generic);
+  }
+}
+
 export class ClassType extends Type {
   readonly name: string;
-  readonly members: Map<string, ClassMember>;
+  private readonly members: Map<string, ClassMember>;
+  readonly generics: GenericContainer[];
 
   toString() {
     return this.name;
   }
 
+  get(name: string) {
+    return this.members.get(name);
+  }
+
   constructor(
     name: string,
     members: Map<string, ClassMember>,
-    kind?: TypeKind
+    kind?: TypeKind,
+    generics?: GenericContainer[]
   ) {
     super(kind || TypeKind.Class);
     this.name = name;
     this.members = members;
+    this.generics = generics || [];
   }
 }
 
@@ -132,14 +185,47 @@ export class ArrayType extends ClassType {
   constructor(element_type: Type) {
     super("Array", new Map(), TypeKind.Array);
     this.element_type = element_type;
-    this.members.set("push", {
-      index: 0,
-      type: new FunctionType("push", new VoidType(), [new VoidType()]),
-    });
-    this.members.set("length", {
-      index: 1,
-      type: new NumberType()
-    });
+  }
+  get(name: string) {
+    switch (name) {
+      case "push":
+        return {
+          index: 0,
+          type: new FunctionType("push", new VoidType(), [this.element_type]),
+        };
+      case "length":
+        return {
+          index: 1,
+          type: new NumberType(),
+        };
+      case "forEach":
+        return {
+          index: 2,
+          type: new FunctionType("forEach", new VoidType(), [
+            new FunctionType(undefined, new VoidType(), [this.element_type]),
+          ]),
+        };
+      case "map": {
+        let k = new GenericContainer();
+        return {
+          index: 3,
+          type: new FunctionType(
+            "map",
+            new ArrayType(k),
+            [new FunctionType(undefined, k, [this.element_type])],
+            undefined,
+            [k]
+          ),
+        };
+      }
+    }
+    return undefined;
+  }
+
+  isCompatibleWith(other: Type) {
+    return (
+      other.isArray() && other.element_type.isCompatibleWith(this.element_type)
+    );
   }
 }
 
@@ -148,6 +234,7 @@ export class FunctionType extends Type {
   readonly return_type: Type;
   readonly parameters: Type[];
   readonly sha?: string;
+  readonly generics: GenericContainer[];
 
   toString() {
     return `(${this.parameters
@@ -159,13 +246,15 @@ export class FunctionType extends Type {
     name: string | undefined,
     return_type: Type,
     parameters: Type[],
-    sha?: string
+    sha?: string,
+    generics?: GenericContainer[]
   ) {
     super(TypeKind.Function);
     this.name = name;
     this.return_type = return_type;
     this.parameters = parameters;
     this.sha = sha;
+    this.generics = generics || [];
   }
 }
 

@@ -1,6 +1,6 @@
 import ts, { Type, TypeNode } from "typescript";
-import * as ty from "./types";
-import { Scope } from "./scope";
+import * as ty from "../types";
+import { Scope } from "../scope";
 
 declare module "typescript" {
   export interface Metadata {
@@ -10,6 +10,7 @@ declare module "typescript" {
     class_type_scope?: Scope<ty.ClassTypeData>;
     this_passthrough?: ts.Expression;
     bitcast?: boolean;
+    func_type?: ty.FunctionType;
   }
   export interface Node {
     metadata?: Metadata;

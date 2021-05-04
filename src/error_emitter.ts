@@ -1,6 +1,6 @@
 import ts from "typescript";
 import { highlight } from "cli-highlight";
-import 'colors';
+import "colors";
 
 enum ErrorKind {
   Error,
@@ -29,9 +29,12 @@ export class Error {
     if (this.kind == ErrorKind.Note) kind_string = "Note".blue;
     let lines = file.getFullText().split("\n");
     console.log(
-      `${file.fileName}:${line}:${character}: ${kind_string}: ${this.message}\n`.bold +
-        highlight(lines[line], { language: "typescript" }) + "\n" +
-				" ".repeat(character) + "^".repeat(this.node.getWidth()).cyan
+      `${file.fileName}:${line}:${character}: ${kind_string}: ${this.message}\n`
+        .bold +
+        highlight(lines[line], { language: "typescript" }) +
+        "\n" +
+        " ".repeat(character) +
+        "^".repeat(this.node.getWidth()).cyan
     );
   }
 }

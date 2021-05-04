@@ -23,26 +23,25 @@ function add(a: number, b: number): number {
 
 function ts_main(): number {
   let val = new MyClass(9999);
-  let a: number[] = [];
-  a.push(1.3);
-  a.push(2.4);
-  a.push(3.5);
-  a.push(4.6);
+  let a: number[] = [1.3, 2.4, 3.5, 4.6];
+
+  let q: number[] = a.map((val: number): number => {
+    return val + 1;
+  });
+
+  q.forEach((num: number): void => {
+    console.log(num);
+  });
 
   for (let i = 0; i < a.length; i += 1) {
     console.log(a[i]);
   }
 
-  let m: string[] = [];
-  m.push("a");
-  m.push("ab");
-  m.push("abc");
-  m.push("abcd");
+  let m: string[] = ["a", "ab", "abc", "abcd"];
 
-
-  for (let i = 0; i < m.length; i += 1) {
-    console.log(m[i]);
-  }
+  m.forEach((el: string): void => {
+    console.log(el);
+  });
 
   console.log("Hello, world!");
   console.log(1);
@@ -55,37 +54,13 @@ function ts_main(): number {
 
   let b = add(1, 2);
 
-  let mine: () => void = (): void => {
-    console.log(1.0);
+  let mine: (num: number) => string = (num: number): string => {
+    console.log(num);
+    return "hello, lambda";
   };
 
-  mine();
+  console.log(mine(3.141592));
 
   console.log(val.first);
   return 0;
 }
-
-// declare function console.log(d: number);
-
-// function add(a: number, b: number): number {
-//   return a + b;
-// }
-
-// function main(a: number): number {
-//   // let obj: { first: number; next: number } = {};
-
-//   let infer = new MyClass();
-
-//   infer.first = 32;
-
-//   console.log(infer.first);
-
-//   let printMe: (d: number) => void = (d: number) => console.log(d);
-
-//   for (let i: number = 0; i < 10; i++) {
-//     if (i < 2) printMe(i);
-//     else printMe(i + 32);
-//   }
-
-//   return 3;
-// }

@@ -4,12 +4,16 @@ echo " <<== Building compiler ==>>"
 npx tsc
 if [ $? -eq 0 ]; then
   echo " <<== Building stl ==>>"
-  cd stl
+  cd cpp_stl
   make
-  cd ..
-  echo " <<== Building examples ==>>"
-  cd example
-  ./br.sh
+  if [ $? -eq 0 ]; then
+    cd ..
+    echo " <<== Building examples ==>>"
+    cd example
+    ./br.sh
+  else
+    echo FAIL
+  fi
   cd ..
 else
   echo FAIL

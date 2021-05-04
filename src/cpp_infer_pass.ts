@@ -5,7 +5,7 @@ import * as ty from "./types";
 import { TypeVisitor } from "./type_visitor";
 import { InternalError } from "./err";
 import { ErrorEmitter } from "./error_emitter";
-import sha1 from 'js-sha1';
+import sha1 from "js-sha1";
 
 export class InferTypePass extends TypeVisitor<ty.Type> {
   current_scope: Scope<ty.Type>;
@@ -25,7 +25,12 @@ export class InferTypePass extends TypeVisitor<ty.Type> {
       if (!param.type) throw new InternalError("Missing type"); // TODO: add error message:
       return this.visit(param.type);
     });
-    return new ty.FunctionType(node.name?.getText(), ret_type, params, sha1(node.getText()));
+    return new ty.FunctionType(
+      node.name?.getText(),
+      ret_type,
+      params,
+      sha1(node.getText())
+    );
   }
 
   protected visitVoidKeyword(
@@ -48,7 +53,9 @@ export class InferTypePass extends TypeVisitor<ty.Type> {
     return new ty.ArrayType(this.visit(node.elementType));
   }
 
-  protected visitStringKeyword(_node: ts.KeywordToken<ts.SyntaxKind.StringKeyword>): ty.Type {
+  protected visitStringKeyword(
+    _node: ts.KeywordToken<ts.SyntaxKind.StringKeyword>
+  ): ty.Type {
     return new ty.StringType();
   }
 }
@@ -94,8 +101,7 @@ export class InferPass extends NodeVisitor<void> {
     if (!node.metadata) node.metadata = {};
     if (!node.type)
       return this.e.error(node, "Function declaration is missing return type");
-    if (!node.name)
-      return this.e.error(node, "Function must have name");
+    if (!node.name) return this.e.error(node, "Function must have name");
 
     try {
       node.metadata.infer_type = new ty.FunctionType(
@@ -160,8 +166,7 @@ export class InferPass extends NodeVisitor<void> {
 
   protected visitVariableDeclaration(node: ts.VariableDeclaration): void {
     if (!node.metadata) node.metadata = {};
-    if (node.initializer)
-      this.visit(node.initializer);
+    if (node.initializer) this.visit(node.initializer);
     if (node.initializer && !node.type) {
       node.metadata.infer_type = node.initializer.metadata?.infer_type;
     } else if (node.type) {
@@ -177,6 +182,25 @@ export class InferPass extends NodeVisitor<void> {
       this.e.error(node, "Unable to infer type");
       this.e.note(node.name, "Add explicit type here");
       return;
+    }
+
+    if (node.initializer?.metadata?.infer_type)
+      node.initializer.metadata.infer_type.resolveGenerics(
+        node.metadata.infer_type
+      );
+
+    if (
+      node.initializer?.metadata?.infer_type &&
+      !node.metadata.infer_type.isCompatibleWith(
+        node.initializer.metadata.infer_type
+      )
+    ) {
+      this.e.error(node, "Types are not compatible");
+      this.e.note(
+        node.initializer,
+        node.initializer.metadata.infer_type.toString()
+      );
+      this.e.note(node.name, node.metadata.infer_type.toString());
     }
     this.current_scope.add(node.name.getText(), node.metadata.infer_type);
   }
@@ -243,38 +267,53 @@ export class InferPass extends NodeVisitor<void> {
     }
 
     if (node.arguments.length != ty.parameters.length) {
-      return this.e.error(node, `expected ${ty.parameters.length} arguments`)
+      return this.e.error(node, `expected ${ty.parameters.length} arguments`);
     }
     node.arguments.forEach((arg, i) => {
       this.visit(arg);
-      if (!arg.metadata?.infer_type)
-        return this.e.error(arg, "Unknown type");
+      if (!arg.metadata?.infer_type) return this.e.error(arg, "Unknown type");
       if (!ty)
-        return this.e.error(node.expression, "Cannot find function name in scope");
+        return this.e.error(
+          node.expression,
+          "Cannot find function name in scope"
+        );
       if (!ty.isFunction())
         return this.e.error(node, "Cannot call a non-function value");
 
-      if (ty.parameters[i].isAny() && arg.metadata.infer_type.isNumber()) {
-        arg.metadata.cast_to = "Number";
-        return;
-      }
-
-      if (ty.parameters[i].isVoid() && arg.metadata.infer_type.isNumber()) {
-        arg.metadata.bitcast = true;
-        return;
-      }
-
-      if (!ty.parameters[i].isVoid() && !ty.parameters[i].isCompatibleWith(arg.metadata.infer_type)) {
-        return this.e.error(arg, `Cannot implicitly cast ${arg.metadata.infer_type} to ${ty.parameters[i]}`);
+      if (
+        !ty.parameters[i].isVoid() &&
+        !ty.parameters[i].isCompatibleWith(arg.metadata.infer_type)
+      ) {
+        return this.e.error(
+          arg,
+          `Cannot implicitly cast ${arg.metadata.infer_type} to ${ty.parameters[i]}`
+        );
       }
     });
+    node.metadata.func_type = ty;
     node.metadata.infer_type = ty.return_type;
-    if (ts.isPropertyAccessExpression(node.expression))
-      node.metadata.this_passthrough = node.expression.expression;
   }
 
   protected visitArrowFunction(node: ts.ArrowFunction): void {
+    if (!node.metadata) node.metadata = {};
+    this.enterScope();
+    let params = node.parameters.map((param) => {
+      if (!param.type) {
+        this.e.error(param, "Parameter is missing explicit type declaration");
+        throw 1;
+      }
+      let ty = this.tv.visit(param.type);
+      this.current_scope.add(param.name.getText(), ty);
+      return ty;
+    });
+    if (!node.type) return this.e.error(node, "expected return type");
+    node.metadata.infer_type = new ty.FunctionType(
+      undefined,
+      this.tv.visit(node.type),
+      params
+    );
     if (node.body) this.visit(node.body);
+    this.exitScope();
   }
 
   protected visitClassDeclaration(node: ts.ClassDeclaration): void {
@@ -364,7 +403,7 @@ export class InferPass extends NodeVisitor<void> {
         node.expression,
         "Cannot access properties of non-object values"
       );
-    let rhs = lhs_t.members.get(node.name.getText());
+    let rhs = lhs_t.get(node.name.getText());
     if (!rhs)
       return this.e.error(node.name, `Property not found in type ${lhs_t}`);
     if (!rhs.type) return this.e.error(node.name, "WTF");
@@ -382,19 +421,53 @@ export class InferPass extends NodeVisitor<void> {
 
   protected visitArrayLiteralExpression(node: ts.ArrayLiteralExpression): void {
     if (!node.metadata) node.metadata = {};
-    node.metadata.infer_type = new ty.ArrayType(new ty.NumberType());
-  };
+    let type = new ty.VoidType();
+    if (node.elements.length > 0) {
+      node.elements.forEach((element, i) => {
+        this.visit(element);
+        if (!node.metadata) return; // Unreachable
+        if (!element.metadata?.infer_type)
+          return this.e.error(element, "Unable to infer type of array element");
+        if (i != 0 && !type.isCompatibleWith(element.metadata.infer_type)) {
+          return this.e.error(
+            element,
+            "Array elements must have similar type signatures"
+          );
+        }
+        type = element.metadata.infer_type;
+        node.metadata.infer_type = new ty.ArrayType(
+          element.metadata.infer_type
+        );
+      });
+      return;
+    }
+
+    if (ts.isVariableDeclaration(node.parent)) {
+      if (!node.parent.type) return;
+      node.metadata.infer_type = this.tv.visit(node.parent.type);
+    } else {
+      node.metadata.infer_type = new ty.ArrayType(new ty.AnyType());
+    }
+  }
 
   protected visitEndOfFileToken(_node: ts.EndOfFileToken): void {}
 
-  protected visitElementAccessExpression(node: ts.ElementAccessExpression): void {
+  protected visitElementAccessExpression(
+    node: ts.ElementAccessExpression
+  ): void {
     if (!node.metadata) node.metadata = {};
     this.visit(node.expression);
     this.visit(node.argumentExpression);
     if (!node.expression.metadata?.infer_type?.isArray())
-      return this.e.error(node.expression, "Cannot access element of non-array type");
+      return this.e.error(
+        node.expression,
+        "Cannot access element of non-array type"
+      );
     if (!node.argumentExpression.metadata?.infer_type?.isNumber())
-      return this.e.error(node.argumentExpression, "Array accessor must be a number type");
+      return this.e.error(
+        node.argumentExpression,
+        "Array accessor must be a number type"
+      );
     node.metadata.infer_type = node.expression.metadata.infer_type.element_type;
   }
 }

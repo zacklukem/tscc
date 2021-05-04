@@ -19,7 +19,6 @@
   - Numbers, classes etc, but not optional, readonly etc
 - [x] Primitive methods
 - [x] Constructors
-- [ ] Memory free and move instructions
 - [ ] Method modifiers
 - [ ] Advanced members with modifiers
 - [ ] Inheritance
@@ -45,9 +44,9 @@
 
 - [x] Numbers
 - [x] Class types
+- [x] Strings
+- [x] Arrays
 - [ ] Booleans
-- [ ] Strings
-- [ ] Arrays
 - [ ] Anonymous objects
 
 ## Code Verification

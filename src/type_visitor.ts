@@ -15,9 +15,13 @@ export abstract class NewTypeVisitor<T> {
       case ty.TypeKind.Void:
         return this.visitVoidType(node as ty.VoidType);
       case ty.TypeKind.AnonymousFunction:
-        return this.visitAnonymousFunctionType(node as ty.AnonymousFunctionType);
+        return this.visitAnonymousFunctionType(
+          node as ty.AnonymousFunctionType
+        );
       case ty.TypeKind.Array:
         return this.visitArray(node as ty.ArrayType);
+      case ty.TypeKind.Generic:
+        return this.visitGeneric(node as ty.GenericContainer);
     }
 
     throw new Error(`Unhandled type: ${ts.SyntaxKind[node.kind]}`); // TODO: uh...
@@ -33,7 +37,10 @@ export abstract class NewTypeVisitor<T> {
   protected abstract visitFunctionType(node: ty.FunctionType): T;
   protected abstract visitVoidType(node: ty.VoidType): T;
   protected abstract visitArray(node: ty.ArrayType): T;
-  protected abstract visitAnonymousFunctionType(node: ty.AnonymousFunctionType): T;
+  protected abstract visitAnonymousFunctionType(
+    node: ty.AnonymousFunctionType
+  ): T;
+  protected abstract visitGeneric(node: ty.GenericContainer): T;
 }
 
 export abstract class TypeVisitor<T> {
@@ -48,7 +55,9 @@ export abstract class TypeVisitor<T> {
           node as ts.KeywordToken<ts.SyntaxKind.VoidKeyword>
         );
       case ts.SyntaxKind.StringKeyword:
-        return this.visitStringKeyword(node as ts.KeywordToken<ts.SyntaxKind.StringKeyword>);
+        return this.visitStringKeyword(
+          node as ts.KeywordToken<ts.SyntaxKind.StringKeyword>
+        );
       case ts.SyntaxKind.FunctionType:
         return this.visitFunctionTypeNode(node as ts.FunctionTypeNode);
       case ts.SyntaxKind.TypeLiteral:
@@ -76,6 +85,7 @@ export abstract class TypeVisitor<T> {
   protected abstract visitTypeLiteralNode(node: ts.TypeLiteralNode): T;
   protected abstract visitTypeReferenceNode(node: ts.TypeReferenceNode): T;
   protected abstract visitArrayTypeNode(node: ts.ArrayTypeNode): T;
-  protected abstract visitStringKeyword(node: ts.KeywordToken<ts.SyntaxKind.StringKeyword>): T;
-
+  protected abstract visitStringKeyword(
+    node: ts.KeywordToken<ts.SyntaxKind.StringKeyword>
+  ): T;
 }
