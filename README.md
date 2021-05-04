@@ -1,6 +1,6 @@
 # TSCC
 
-TSCC is a typescript to c compiler. It is written in typescript (with the hope to eventually bootstrap).
+TSCC is a typescript to C++ compiler. It is written in typescript (with the hope to eventually bootstrap).
 
 The goal of TSCC is to follow the typescript specification if possible, but it probably won't be 100% compatible
 because for now I don't plan to implement javascript-style dynamic objects where properties can be added at runtime.

@@ -11,6 +11,7 @@ declare module "typescript" {
     this_passthrough?: ts.Expression;
     bitcast?: boolean;
     func_type?: ty.FunctionType;
+    returns?: [ty.Type, ts.Node];
   }
   export interface Node {
     metadata?: Metadata;

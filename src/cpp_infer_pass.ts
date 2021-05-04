@@ -99,35 +99,54 @@ export class InferPass extends NodeVisitor<void> {
 
   protected visitFunctionDeclaration(node: ts.FunctionDeclaration): void {
     if (!node.metadata) node.metadata = {};
-    if (!node.type)
-      return this.e.error(node, "Function declaration is missing return type");
     if (!node.name) return this.e.error(node, "Function must have name");
 
+    this.enterScope();
     try {
+      let params = node.parameters.map((param) => {
+        if (!param.type) {
+          this.e.error(param, "Parameter is missing explicit type declaration");
+          throw 1;
+        }
+        let ty = this.tv.visit(param.type);
+        this.current_scope.add(param.name.getText(), ty);
+        return ty;
+      });
+
+      if (node.body) this.visit(node.body);
+
+      let return_type: ty.Type | undefined;
+
+      // Return type explicitly declared
+      if (node.type) return_type = this.tv.visit(node.type);
+      if (node.body) {
+        this.visit(node.body);
+        node.body.forEachChild((stmt) => {
+          if (!node.metadata) return; // Unreachable?
+          if (stmt.metadata?.returns) {
+            if (!return_type) return (return_type = stmt.metadata.returns[0]);
+            if (!return_type.isCompatibleWith(stmt.metadata.returns[0]))
+              this.e.error(
+                stmt.metadata.returns[1],
+                "Incompatible return type"
+              );
+          }
+        });
+      }
+
+      if (!return_type) return this.e.error(node, "expected return type");
+
       node.metadata.infer_type = new ty.FunctionType(
         node.name?.getText(),
-        this.tv.visit(node.type),
-        node.parameters.map((param) => {
-          if (!param.type) {
-            this.e.error(
-              param,
-              "Parameter is missing explicit type declaration"
-            );
-            throw 1;
-          }
-          let ty = this.tv.visit(param.type);
-          this.current_scope.add(param.name.getText(), ty);
-          return ty;
-        })
+        return_type,
+        params
       );
     } catch (e) {
       if (typeof e === "number") return; // Break out of outer function with inner throw
       throw e;
     }
-    this.current_scope.add(node.name.getText(), node.metadata.infer_type);
-    this.enterScope();
-    if (node.body) this.visit(node.body);
     this.exitScope();
+    this.current_scope.add(node.name.getText(), node.metadata.infer_type);
     // node.forEachChild(this.visit);
   }
 
@@ -138,7 +157,18 @@ export class InferPass extends NodeVisitor<void> {
   }
 
   protected visitReturnStatement(node: ts.ReturnStatement): void {
-    node.forEachChild(this.visit);
+    if (!node.metadata) node.metadata = {};
+    if (node.expression) {
+      this.visit(node.expression);
+      if (!node.expression.metadata?.infer_type)
+        return this.e.error(node.expression, "Unable to infer");
+      node.metadata.returns = [
+        node.expression.metadata?.infer_type,
+        node.expression,
+      ];
+    } else {
+      node.metadata.returns = [new ty.VoidType(), node];
+    }
   }
 
   protected visitNumericLiteral(node: ts.NumericLiteral): void {
@@ -300,19 +330,43 @@ export class InferPass extends NodeVisitor<void> {
     let params = node.parameters.map((param) => {
       if (!param.type) {
         this.e.error(param, "Parameter is missing explicit type declaration");
-        throw 1;
+        throw 1; // TODO: don't do this
       }
       let ty = this.tv.visit(param.type);
       this.current_scope.add(param.name.getText(), ty);
       return ty;
     });
-    if (!node.type) return this.e.error(node, "expected return type");
+
+    let return_type: ty.Type | undefined;
+
+    // Return type explicitly declared
+    if (node.type) return_type = this.tv.visit(node.type);
+    if (node.body) {
+      this.visit(node.body);
+      if (!ts.isBlock(node.body)) {
+        if (!node.body.metadata?.infer_type) return;
+        if (!return_type) return_type = node.body.metadata?.infer_type;
+        else if (!return_type.isCompatibleWith(node.body.metadata.infer_type))
+          this.e.error(node.body, "Incompatible return type");
+      }
+      node.body.forEachChild((stmt) => {
+        if (!node.metadata) return; // Unreachable?
+        if (stmt.metadata?.returns) {
+          if (!return_type) return (return_type = stmt.metadata.returns[0]);
+          if (!return_type.isCompatibleWith(stmt.metadata.returns[0]))
+            this.e.error(stmt.metadata.returns[1], "Incompatible return type");
+        }
+      });
+    }
+
+    if (!return_type) return this.e.error(node, "expected return type");
+
     node.metadata.infer_type = new ty.FunctionType(
       undefined,
-      this.tv.visit(node.type),
+      return_type,
       params
     );
-    if (node.body) this.visit(node.body);
+
     this.exitScope();
   }
 

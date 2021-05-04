@@ -140,14 +140,14 @@ export class CGenPass extends NodeVisitor<cc.Node<any> | undefined> {
       throw new InternalError("Function is missing name (see previous pass)");
     if (!node.body)
       throw new InternalError("Function is missing body (see previous pass)");
-    if (!node.type)
+    if (!node.metadata?.infer_type?.isFunction())
       throw new InternalError(
         "Function is missing return type (see previous pass)"
       );
     return this.factory.createFunction(
       0,
       true, // TODO: check for extern
-      this.tv.visit(node.type), // TODO: maybe switch this to use NewType
+      this.ntv.visit(node.metadata.infer_type.return_type), // TODO: maybe switch this to use NewType
       this.factory.createIdent(node.name.getText()),
       node.parameters.map((param) => {
         if (!param.type) throw new InternalError("Missing param type");
@@ -354,7 +354,7 @@ export class CGenPass extends NodeVisitor<cc.Node<any> | undefined> {
   protected visitArrowFunction(node: ts.ArrowFunction): cc.LambdaExpr {
     if (!node.body)
       throw new InternalError("Function is missing body (see previous pass)");
-    if (!node.type)
+    if (!node.metadata?.infer_type?.isFunction())
       throw new InternalError(
         "Function is missing return type (see previous pass)"
       );
@@ -367,7 +367,7 @@ export class CGenPass extends NodeVisitor<cc.Node<any> | undefined> {
       ]);
     }
     return this.factory.createLambdaExpr(
-      this.tv.visit(node.type),
+      this.ntv.visit(node.metadata.infer_type.return_type),
       node.parameters.map((param) => {
         if (!param.type) throw new InternalError("Missing param type");
         return [

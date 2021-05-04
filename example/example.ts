@@ -11,7 +11,7 @@ class MyClass {
   }
 }
 
-function add(a: number, b: number): number {
+function add(a: number, b: number) {
   let c: number = 3;
   if (a == 2) {
     return b;
@@ -21,13 +21,11 @@ function add(a: number, b: number): number {
   return a + b;
 }
 
-function ts_main(): number {
+function ts_main() {
   let val = new MyClass(9999);
   let a: number[] = [1.3, 2.4, 3.5, 4.6];
 
-  let q: number[] = a.map((val: number): number => {
-    return val + 1;
-  });
+  let q: number[] = a.map((val: number) => val + 1);
 
   q.forEach((num: number): void => {
     console.log(num);
