@@ -9,8 +9,8 @@
 - [x] Function Call Expressions
 - [x] New Expressions
 - [x] Arrow functions
+- [x] Array Literal Expressions
 - [ ] Object Literal Expressions
-- [ ] Array Literal Expressions
 - [ ] Castings
 
 ### Classes
@@ -46,7 +46,7 @@
 - [x] Class types
 - [x] Strings
 - [x] Arrays
-- [ ] Booleans
+- [x] Booleans
 - [ ] Anonymous objects
 
 ## Code Verification
@@ -58,7 +58,7 @@
 - [ ] Array
 
   - [x] Array.prototype.length
-  - [x] get Array[@@species]
+  - [x] get Array\[@@species]
   - [x] Array.prototype.at()
   - [x] Array.prototype.concat()
   - [x] Array.prototype.every()
@@ -80,8 +80,8 @@
   - [x] Array.prototype.sort()
   - [x] Array.prototype.toString()
   - [x] Array.prototype.unshift()
-  - [ ] Array.prototype[@@unscopables]
-  - [ ] Array.prototype[@@iterator]()
+  - [ ] Array.prototype\[@@unscopables]
+  - [ ] Array.prototype\[@@iterator]()
   - [ ] Array.prototype.copyWithin()
   - [ ] Array.prototype.entries()
   - [ ] Array.prototype.fill()
@@ -99,7 +99,7 @@
 - [ ] String
 
   - [x] String.prototype.toString()
-  - [ ] String.prototype[@@iterator]()
+  - [ ] String.prototype\[@@iterator]()
   - [ ] String.prototype.anchor()
   - [ ] String.prototype.at()
   - [ ] String.prototype.big()
