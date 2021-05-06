@@ -4,6 +4,7 @@ export enum TypeKind {
   Class,
   String,
   Number,
+  Boolean,
   Function,
   Void,
   AnonymousFunction,
@@ -168,6 +169,15 @@ export class NumberType extends Type {
   }
 }
 
+export class BooleanType extends Type {
+  toString() {
+    return "boolean";
+  }
+  constructor() {
+    super(TypeKind.Boolean);
+  }
+}
+
 export class StringType extends ClassType {
   toString() {
     return "string";
@@ -188,6 +198,20 @@ export class ArrayType extends ClassType {
   }
   get(name: string) {
     switch (name) {
+      case "at":
+        return {
+          index: 5,
+          type: new FunctionType("at", this.element_type, [
+            new NumberType()
+          ]),
+        };
+      case "concat":
+        return {
+          index: 6,
+          type: new FunctionType("concat", this, [
+            this
+          ]),
+        };
       case "push":
         return {
           index: 0,
@@ -203,6 +227,13 @@ export class ArrayType extends ClassType {
           index: 2,
           type: new FunctionType("forEach", new VoidType(), [
             new FunctionType(undefined, new VoidType(), [this.element_type]),
+          ]),
+        };
+      case "join":
+        return {
+          index: 4,
+          type: new FunctionType("join", new StringType(), [
+            new StringType()
           ]),
         };
       case "map": {

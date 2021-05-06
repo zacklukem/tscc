@@ -52,3 +52,47 @@
 ## Code Verification
 
 - [ ] Write code verification road map
+
+## Standard Library
+
+- [ ] Array
+  - [ ] Array.prototype[@@unscopables]
+  - [x] Array.prototype.length
+  - [ ] Array.prototype[@@iterator]()
+  - [x] get Array[@@species]
+  - [x] Array.prototype.at()
+  - [x] Array.prototype.concat()
+  - [ ] Array.prototype.copyWithin()
+  - [ ] Array.prototype.entries()
+  - [ ] Array.prototype.every()
+  - [ ] Array.prototype.fill()
+  - [ ] Array.prototype.filter()
+  - [ ] Array.prototype.find()
+  - [ ] Array.prototype.findIndex()
+  - [ ] Array.prototype.flat()
+  - [ ] Array.prototype.flatMap()
+  - [x] Array.prototype.forEach()
+  - [ ] Array.from()
+  - [ ] Array.prototype.includes()
+  - [ ] Array.prototype.indexOf()
+  - [ ] Array.isArray()
+  - [x] Array.prototype.join()
+  - [ ] Array.prototype.keys()
+  - [ ] Array.prototype.lastIndexOf()
+  - [x] Array.prototype.map()
+  - [ ] Array.of()
+  - [ ] Array.prototype.pop()
+  - [x] Array.prototype.push()
+  - [ ] Array.prototype.reduce()
+  - [ ] Array.prototype.reduceRight()
+  - [ ] Array.prototype.reverse()
+  - [ ] Array.prototype.shift()
+  - [ ] Array.prototype.slice()
+  - [ ] Array.prototype.some()
+  - [ ] Array.prototype.sort()
+  - [ ] Array.prototype.splice()
+  - [ ] Array.prototype.toLocaleString()
+  - [ ] Array.prototype.toSource()
+  - [x] Array.prototype.toString()
+  - [ ] Array.prototype.unshift()
+  - [ ] Array.prototype.values()

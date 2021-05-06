@@ -37,11 +37,13 @@ function ts_main() {
 
   let m: string[] = ["a", "ab", "abc", "abcd"];
 
+  console.log(m.join(":::"));
+
   m.forEach((el: string): void => {
     console.log(el);
   });
 
-  console.log("Hello, world!");
+  console.log("Hello, world!" + "concat");
   console.log(1);
 
   for (let i: number = 0; i < 23; i += 1) {

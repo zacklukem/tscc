@@ -5,6 +5,7 @@ export enum NodeKind {
   Ident,
   IdentLiteral,
   NumberLiteral,
+  BooleanLiteral,
   BinaryExpr,
   UnaryExpr,
   VarDeclStmt,
@@ -759,6 +760,17 @@ export class NumberLiteral extends Expr {
   }
 }
 
+export class BooleanLiteral extends Expr {
+  readonly value: boolean;
+  constructor(src: SourceFile, value: boolean) {
+    super(src, NodeKind.BooleanLiteral);
+    this.value = value;
+  }
+  gen(): string {
+    return this.value ? "true" : "false";
+  }
+}
+
 export class StringLiteral extends Expr {
   readonly value: string;
   constructor(src: SourceFile, value: string) {
@@ -981,6 +993,10 @@ export class Factory {
 
   createNumberLiteral(value: string) {
     return new NumberLiteral(this.src, value);
+  }
+
+  createBooleanLiteral(value: boolean) {
+    return new BooleanLiteral(this.src, value);
   }
 
   createBlock(statements: Stmt[]) {

@@ -26,6 +26,10 @@ export class TypeGenPass extends NewTypeVisitor<cc.Type> {
     return this.factory.createIdentType("double");
   }
 
+  protected visitBooleanType(_node: ty.BooleanType): cc.Type {
+    return this.factory.createIdentType("bool");
+  }
+
   protected visitFunctionType(node: ty.FunctionType): cc.Type {
     return this.factory.createFunctionType(
       this.visit(node.return_type),
@@ -69,6 +73,12 @@ export class CTypeGenPass extends TypeVisitor<cc.Type> {
     _node: ts.KeywordToken<ts.SyntaxKind.NumberKeyword>
   ): cc.Type {
     return this.factory.createIdentType("double");
+  }
+
+  protected visitBooleanKeyword(
+    _node: ts.KeywordToken<ts.SyntaxKind.BooleanKeyword>
+  ): cc.Type {
+    return this.factory.createIdentType("bool");
   }
 
   protected visitFunctionTypeNode(node: ts.FunctionTypeNode): cc.Type {
@@ -183,6 +193,12 @@ export class CGenPass extends NodeVisitor<cc.Node<any> | undefined> {
 
   protected visitNumericLiteral(node: ts.NumericLiteral): cc.NumberLiteral {
     return this.factory.createNumberLiteral(node.getText());
+  }
+
+  protected visitBooleanLiteral(node: ts.BooleanLiteral): cc.BooleanLiteral {
+    return this.factory.createBooleanLiteral(
+      node.kind === ts.SyntaxKind.TrueKeyword
+    );
   }
 
   protected visitIdentifier(node: ts.Identifier): cc.IdentLiteral {

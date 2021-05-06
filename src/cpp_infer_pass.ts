@@ -19,6 +19,12 @@ export class InferTypePass extends TypeVisitor<ty.Type> {
     return new ty.NumberType();
   }
 
+  protected visitBooleanKeyword(
+    _node: ts.KeywordToken<ts.SyntaxKind.BooleanKeyword>
+  ): ty.Type {
+    return new ty.BooleanType();
+  }
+
   protected visitFunctionTypeNode(node: ts.FunctionTypeNode): ty.Type {
     let ret_type = this.visit(node.type);
     let params = node.parameters.map((param) => {
@@ -176,6 +182,11 @@ export class InferPass extends NodeVisitor<void> {
     node.metadata.infer_type = new ty.NumberType();
   }
 
+  protected visitBooleanLiteral(node: ts.BooleanLiteral): void {
+    if (!node.metadata) node.metadata = {};
+    node.metadata.infer_type = new ty.BooleanType();
+  }
+
   protected visitIdentifier(node: ts.Identifier): void {
     if (!node.metadata) node.metadata = {};
     let ty = this.current_scope.get(node.getText());
@@ -259,7 +270,6 @@ export class InferPass extends NodeVisitor<void> {
       throw new InternalError("Failed to infer");
     if (!node.right.metadata?.infer_type)
       throw new InternalError("Failed to infer");
-
     if (
       !node.left.metadata?.infer_type.isCompatibleWith(
         node.right.metadata?.infer_type
@@ -273,7 +283,20 @@ export class InferPass extends NodeVisitor<void> {
       this.e.note(node.right, node.right.metadata?.infer_type.toString());
       return;
     }
-    node.metadata.infer_type = node.left.metadata?.infer_type;
+    switch (node.operatorToken.kind) {
+      case ts.SyntaxKind.AmpersandAmpersandToken:
+      case ts.SyntaxKind.BarBarToken:
+      case ts.SyntaxKind.LessThanToken:
+      case ts.SyntaxKind.LessThanEqualsToken:
+      case ts.SyntaxKind.GreaterThanToken:
+      case ts.SyntaxKind.GreaterThanEqualsToken:
+      case ts.SyntaxKind.EqualsEqualsToken:
+      case ts.SyntaxKind.EqualsEqualsEqualsToken:
+        node.metadata.infer_type = new ty.BooleanType();
+      break;
+      default:
+        node.metadata.infer_type = node.left.metadata?.infer_type;
+    }
   }
 
   protected visitPostfixUnaryExpression(node: ts.PostfixUnaryExpression): void {

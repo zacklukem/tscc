@@ -10,6 +10,8 @@ export abstract class NewTypeVisitor<T> {
         return this.visitStringType(node as ty.StringType);
       case ty.TypeKind.Number:
         return this.visitNumberType(node as ty.NumberType);
+      case ty.TypeKind.Boolean:
+        return this.visitBooleanType(node as ty.BooleanType);
       case ty.TypeKind.Function:
         return this.visitFunctionType(node as ty.FunctionType);
       case ty.TypeKind.Void:
@@ -34,6 +36,7 @@ export abstract class NewTypeVisitor<T> {
   protected abstract visitClassType(node: ty.ClassType): T;
   protected abstract visitStringType(node: ty.StringType): T;
   protected abstract visitNumberType(node: ty.NumberType): T;
+  protected abstract visitBooleanType(node: ty.BooleanType): T;
   protected abstract visitFunctionType(node: ty.FunctionType): T;
   protected abstract visitVoidType(node: ty.VoidType): T;
   protected abstract visitArray(node: ty.ArrayType): T;
@@ -50,6 +53,10 @@ export abstract class TypeVisitor<T> {
         return this.visitNumberKeyword(
           node as ts.KeywordToken<ts.SyntaxKind.NumberKeyword>
         );
+      case ts.SyntaxKind.BooleanKeyword:
+        return this.visitBooleanKeyword(
+          node as ts.KeywordToken<ts.SyntaxKind.BooleanKeyword>
+        )
       case ts.SyntaxKind.VoidKeyword:
         return this.visitVoidKeyword(
           node as ts.KeywordToken<ts.SyntaxKind.VoidKeyword>
@@ -77,6 +84,9 @@ export abstract class TypeVisitor<T> {
 
   protected abstract visitNumberKeyword(
     node: ts.KeywordToken<ts.SyntaxKind.NumberKeyword>
+  ): T;
+  protected abstract visitBooleanKeyword(
+    node: ts.KeywordToken<ts.SyntaxKind.BooleanKeyword>
   ): T;
   protected abstract visitFunctionTypeNode(node: ts.FunctionTypeNode): T;
   protected abstract visitVoidKeyword(

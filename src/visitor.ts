@@ -13,6 +13,9 @@ export abstract class NodeVisitor<T> {
         return this.visitReturnStatement(node as ts.ReturnStatement);
       case ts.SyntaxKind.NumericLiteral:
         return this.visitNumericLiteral(node as ts.NumericLiteral);
+      case ts.SyntaxKind.TrueKeyword:
+      case ts.SyntaxKind.FalseKeyword:
+        return this.visitBooleanLiteral(node as ts.BooleanLiteral);
       case ts.SyntaxKind.Identifier:
         return this.visitIdentifier(node as ts.Identifier);
       case ts.SyntaxKind.VariableStatement:
@@ -84,6 +87,7 @@ export abstract class NodeVisitor<T> {
   protected abstract visitBlock(node: ts.Block): T;
   protected abstract visitReturnStatement(node: ts.ReturnStatement): T;
   protected abstract visitNumericLiteral(node: ts.NumericLiteral): T;
+  protected abstract visitBooleanLiteral(node: ts.BooleanLiteral): T;
   protected abstract visitIdentifier(node: ts.Identifier): T;
   protected abstract visitVariableStatement(node: ts.VariableStatement): T;
   protected abstract visitVariableDeclarationList(

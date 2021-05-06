@@ -1,2 +1,3 @@
 *.o
 /stl.a
+compile_commands.json

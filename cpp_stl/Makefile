@@ -1,9 +1,7 @@
 BUILD_DIR := ./build
 
 SRCS :=\
-	src/console.cc\
-	src/string.cc\
-	src/array.cc
+  a.cc
 
 OBJS := $(SRCS:%=$(BUILD_DIR)/%.o)
 
