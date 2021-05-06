@@ -2,10 +2,12 @@
 
 TSCC is a typescript to C++ compiler. It is written in typescript (with the hope to eventually bootstrap).
 
-The goal of TSCC is to follow the typescript specification if possible, but it probably won't be 100% compatible
-because for now I don't plan to implement javascript-style dynamic objects where properties can be added at runtime.
-
 See the road map for information about what has been implemented so far.
+
+> Note: TSCC is a fun project not a practical one.  It probably won't be faster
+> than nodejs and probably won't ever fully implement the javascript standard so
+> its probably not a great idea to use it for production unless you want to take
+> on the task of making it work for you.
 
 ## Building
 
