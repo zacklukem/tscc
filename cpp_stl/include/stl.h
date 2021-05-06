@@ -2,12 +2,16 @@
 #define __CPP_STL__CPP_STL_INCLUDE_STL_H
 
 #define NUMBER double
+#define UNDEFINED std::nullopt;
+
+#include <algorithm>
+#include <deque>
 #include <functional>
 #include <iostream>
 #include <memory>
+#include <optional>
 #include <sstream>
 #include <string>
-#include <vector>
 
 #define Rc std::shared_ptr
 
@@ -16,10 +20,18 @@ class String;
 class Console;
 template <class> class Array;
 
+//=========//
+//== Any ==//
+//=========//
+
 class Any {
 public:
   virtual Rc<String> toString() = 0;
 };
+
+//============//
+//== String ==//
+//============//
 
 class String : public Any {
 public:
@@ -37,6 +49,10 @@ Rc<String> operator+(Rc<String> lhs, Rc<String> rhs) {
   return std::make_shared<String>(lhs->_data + rhs->_data);
 }
 
+//===========//
+//== Array ==//
+//===========//
+
 template <class T> class Array : public Any {
 public:
   NUMBER length;
@@ -49,29 +65,94 @@ public:
 
   // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/at
   T at(NUMBER i) const {
-    std::size_t n;
     if (i < 0)
-      n = static_cast<std::size_t>(this->length + i);
-    else
-      n = static_cast<std::size_t>(i);
-    return this->_data[i];
+      return (*this)[this->length + i];
+    return (*this)[i];
+  }
+
+  // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/every
+  bool every(std::function<bool(T)> callback) const {
+    for (auto& el : this->_data) {
+      if (!callback(el))
+        return false;
+    }
+    return true;
   }
 
   // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/concat
   // TODO: add varargs
   Rc<Array<T>> concat(Rc<Array<T>> other) {
-    this->_data.insert(other->_data.end(), other->_data.begin(),
-                       other->_data.end());
+    std::deque<T> r_vec(this->_data);
+    r_vec.insert(r_vec.end(), other->_data.begin(), other->_data.end());
+    return std::make_shared<Array<T>>(r_vec);
   }
 
+  // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/filter
+  // TODO: add optional parameters
+  Rc<Array<T>> filter(std::function<bool(T)> callback) {
+    std::deque<T> vec;
+    for (auto& el : this->_data) {
+      if (callback(el))
+        vec.push_back(el);
+    }
+    return std::make_shared<Array<T>>(vec);
+  }
+
+  // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/find
+  std::optional<T> find(std::function<bool(T)> callback) {
+    for (auto& el : this->_data) {
+      if (callback(el))
+        return std::make_optional<T>(el);
+    }
+    return UNDEFINED;
+  }
+
+  // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/findIndex
+  NUMBER findIndex(std::function<bool(T)> callback) {
+    for (double i = 0; i < this->length; i++) {
+      if (callback((*this)[i]))
+        return i;
+    }
+    return -1;
+  }
+
+  // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/includes
+  bool includes(T value) {
+    for (auto& el : this->_data) {
+      if (value == el)
+        return true;
+    }
+    return false;
+  }
+
+  // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/indexOf
+  NUMBER indexOf(T value) {
+    for (double i = 0; i < this->length; i++) {
+      if ((*this)[i] == value)
+        return i;
+    }
+    return -1;
+  }
+
+  // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/forEach
   virtual void forEach(std::function<void(T)> callback) {
     for (auto& el : this->_data)
       callback(el);
   }
 
+  // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/lastIndexOf
+  NUMBER lastIndexOf(T value) {
+    for (double i = this->length - 1; i >= 0; i--) {
+      if ((*this)[i] == value)
+        return i;
+    }
+    return -1;
+  }
+
+  // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/map
   template <class K> Rc<Array<K>> map(std::function<K(T)> callback) {
     // TODO: maybe use std::transform or something
-    std::vector<K> vec(this->_data.size());
+    std::deque<K> vec(this->_data.size());
     for (int i = 0; i < this->_data.size(); i++) {
       vec[i] = callback(this->_data[i]);
     }
@@ -90,21 +171,100 @@ public:
     return std::make_shared<String>(buf.str());
   }
 
-  virtual void push(T value) {
+  // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/push
+  void push(T value) {
     this->_data.push_back(value);
     this->length++;
-  };
+  }
+
+  // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/pop
+  std::optional<T> pop() {
+    if (this->length == 0)
+      return UNDEFINED;
+    auto result = this->_data.back();
+    this->_data.pop_back();
+    this->length--;
+    return result;
+  }
+
+  // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/reduce
+  // TODO: initial value
+  T reduce(std::function<T(T, T)> callback) {
+    T accumulator = this->_data.front();
+    for (int i = 1; i < this->_data.size(); i++) {
+      accumulator = callback(accumulator, this->_data[i]);
+    }
+    return accumulator;
+  }
+
+  // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/reduceRight
+  // TODO: initial value
+  T reduceRight(std::function<T(T, T)> callback) {
+    T accumulator = this->_data.back();
+    for (int i = this->_data.size() - 2; i >= 0; i--) {
+      accumulator = callback(accumulator, this->_data[i]);
+    }
+    return accumulator;
+  }
+
+  // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/reverse
+  // TODO: figure out how to return Rc<thistype>
+  void reverse() {
+    std::deque<T> vec(this->_data.size());
+    for (int i = this->_data.size() - 1; i >= 0; i--) {
+      vec[this->_data.size() - i - 1] = this->_data[i];
+    }
+    this->_data = vec;
+  }
+
+  // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/reverse
+  std::optional<T> shift() {
+    if (this->length == 0)
+      return UNDEFINED;
+    auto result = this->_data.front();
+    this->_data.pop_front();
+    this->length--;
+    return result;
+  }
+
+  // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/unshift
+  void unshift(T value) {
+    this->_data.push_front(value);
+    this->length++;
+  }
+
+  // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/unshift
+  bool some(std::function<bool(T)> callback) {
+    for (auto& el : this->_data) {
+      if (callback(el))
+        return true;
+    }
+    return false;
+  }
+
+  // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/sort
+  // TODO: figure out how to return Rc<thistype>
+  void sort(std::function<bool(T, T)> comp) {
+    std::sort(this->_data.begin(), this->_data.end(), comp);
+  }
 
   Array<T>() : _data(), length(0){};
 
-  Array<T>(std::vector<T> vec) : _data(vec), length(0){};
+  Array<T>(std::deque<T> vec) : _data(vec) {
+    this->length = static_cast<double>(vec.size());
+  };
 
-  Array<T>(std::initializer_list<T> list)
-      : _data(list), length((NUMBER)list.size()){};
+  Array<T>(std::initializer_list<T> list) : _data(list) {
+    this->length = static_cast<NUMBER>(this->_data.size());
+  };
 
 private:
-  std::vector<T> _data;
+  std::deque<T> _data;
 };
+
+//=============//
+//== Console ==//
+//=============//
 
 class Console : public Any {
 public:

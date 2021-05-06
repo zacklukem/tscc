@@ -201,21 +201,125 @@ export class ArrayType extends ClassType {
       case "at":
         return {
           index: 5,
-          type: new FunctionType("at", this.element_type, [
-            new NumberType()
-          ]),
+          type: new FunctionType("at", this.element_type, [new NumberType()]),
         };
       case "concat":
         return {
           index: 6,
-          type: new FunctionType("concat", this, [
-            this
+          type: new FunctionType("concat", this, [this]),
+        };
+      case "every":
+        return {
+          index: 7,
+          type: new FunctionType("every", new BooleanType(), [
+            new FunctionType(undefined, new BooleanType(), [this.element_type]),
           ]),
+        };
+      case "filter":
+        return {
+          index: 7,
+          type: new FunctionType("filter", this, [
+            new FunctionType(undefined, new BooleanType(), [this.element_type]),
+          ]),
+        };
+      case "find":
+        return {
+          index: 7,
+          type: new FunctionType("find", this.element_type, [
+            new FunctionType(undefined, new BooleanType(), [this.element_type]),
+          ]),
+        };
+      case "findIndex":
+        return {
+          index: 7,
+          type: new FunctionType("findIndex", new NumberType(), [
+            new FunctionType(undefined, new BooleanType(), [this.element_type]),
+          ]),
+        };
+      case "includes":
+        return {
+          index: 7,
+          type: new FunctionType("includes", new BooleanType(), [
+            this.element_type,
+          ]),
+        };
+      case "indexOf":
+        return {
+          index: 7,
+          type: new FunctionType("indexOf", new NumberType(), [
+            this.element_type,
+          ]),
+        };
+      case "lastIndexOf":
+        return {
+          index: 7,
+          type: new FunctionType("lastIndexOf", new NumberType(), [
+            this.element_type,
+          ]),
+        };
+      case "pop":
+        return {
+          index: 0,
+          type: new FunctionType("pop", this.element_type, []),
         };
       case "push":
         return {
           index: 0,
           type: new FunctionType("push", new VoidType(), [this.element_type]),
+        };
+      case "shift":
+        return {
+          index: 0,
+          type: new FunctionType("shift", this.element_type, []),
+        };
+      case "unshift":
+        return {
+          index: 0,
+          type: new FunctionType("unshift", new VoidType(), [
+            this.element_type,
+          ]),
+        };
+      case "reduce":
+        return {
+          index: 0,
+          type: new FunctionType("reduce", this.element_type, [
+            new FunctionType(undefined, this.element_type, [
+              this.element_type,
+              this.element_type,
+            ]),
+          ]),
+        };
+      case "reduceRight":
+        return {
+          index: 0,
+          type: new FunctionType("reduceRight", this.element_type, [
+            new FunctionType(undefined, this.element_type, [
+              this.element_type,
+              this.element_type,
+            ]),
+          ]),
+        };
+      case "reverse":
+        return {
+          index: 0,
+          type: new FunctionType("reverse", new VoidType(), []),
+        };
+      case "some":
+        return {
+          index: 0,
+          type: new FunctionType("some", new BooleanType(), [
+            new FunctionType(undefined, new BooleanType(), [this.element_type]),
+          ]),
+        };
+      case "sort":
+        return {
+          index: 0,
+          type: new FunctionType("some", new VoidType(), [
+            new FunctionType(undefined, new BooleanType(), [
+              this.element_type,
+              this.element_type,
+            ]),
+          ]),
         };
       case "length":
         return {
@@ -232,9 +336,7 @@ export class ArrayType extends ClassType {
       case "join":
         return {
           index: 4,
-          type: new FunctionType("join", new StringType(), [
-            new StringType()
-          ]),
+          type: new FunctionType("join", new StringType(), [new StringType()]),
         };
       case "map": {
         let k = new GenericContainer();

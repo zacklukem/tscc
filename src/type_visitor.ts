@@ -56,7 +56,7 @@ export abstract class TypeVisitor<T> {
       case ts.SyntaxKind.BooleanKeyword:
         return this.visitBooleanKeyword(
           node as ts.KeywordToken<ts.SyntaxKind.BooleanKeyword>
-        )
+        );
       case ts.SyntaxKind.VoidKeyword:
         return this.visitVoidKeyword(
           node as ts.KeywordToken<ts.SyntaxKind.VoidKeyword>

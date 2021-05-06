@@ -2,19 +2,12 @@
 
 echo " <<== Building compiler ==>>"
 npx tsc
+echo " <<== Running stl tests ==>>"
+pushd cpp_stl
+cmake --build . --target test
+popd
 if [ $? -eq 0 ]; then
-  echo " <<== Building stl ==>>"
-  # cd cpp_stl
-  # make
-  if [ $? -eq 0 ]; then
-    # cd ..
-    echo " <<== Building examples ==>>"
-    cd example
-    ./br.sh
-    cd ..
-  else
-    echo FAIL
-  fi
-else
-  echo FAIL
+  cd example
+  ./br.sh
+  cd ..
 fi

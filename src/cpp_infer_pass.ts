@@ -293,7 +293,7 @@ export class InferPass extends NodeVisitor<void> {
       case ts.SyntaxKind.EqualsEqualsToken:
       case ts.SyntaxKind.EqualsEqualsEqualsToken:
         node.metadata.infer_type = new ty.BooleanType();
-      break;
+        break;
       default:
         node.metadata.infer_type = node.left.metadata?.infer_type;
     }
